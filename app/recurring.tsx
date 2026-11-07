@@ -1,4 +1,4 @@
-import { AppButton, EmptyState, ScreenHeader, SegmentedControl, ThemedText } from '@/components/common';
+import { AppButton, AppModal, EmptyState, ScreenHeader, SegmentedControl, ThemedText } from '@/components/common';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useCategories } from '@/features/categories/hooks/use-categories';
 import { RecurringFormModal } from '@/features/recurring/components/recurring-form-modal';
@@ -20,7 +20,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     InteractionManager,
-    Modal,
     Pressable,
     ScrollView,
     View,
@@ -42,7 +41,7 @@ function DeleteConfirmSheet({
     const colors = useThemeColors();
     const insets = useSafeAreaInsets();
     return (
-        <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
+        <AppModal visible animationType="fade" transparent onRequestClose={onCancel}>
             <View className="flex-1 justify-end bg-black/50">
                 <Animated.View
                     entering={FadeInUp.duration(300).easing(Easing.out(Easing.cubic))}
@@ -79,7 +78,7 @@ function DeleteConfirmSheet({
                     </View>
                 </Animated.View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }
 
@@ -99,7 +98,7 @@ function ToggleConfirmSheet({
     const isPaused = item.is_active !== 1;
     const actionColor = isPaused ? colors.success : colors.warning;
     return (
-        <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
+        <AppModal visible animationType="fade" transparent onRequestClose={onCancel}>
             <View className="flex-1 justify-end bg-black/50">
                 <Animated.View
                     entering={FadeInUp.duration(300).easing(Easing.out(Easing.cubic))}
@@ -136,7 +135,7 @@ function ToggleConfirmSheet({
                     </View>
                 </Animated.View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }
 

@@ -2,14 +2,19 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react';
-import { Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppModal } from './app-modal';
 
 /** Resolve a '90%' / px maxHeight against the window height. */
 function toPixels(maxHeight: `${number}%` | number, windowHeight: number): number {
     return typeof maxHeight === 'number' ? maxHeight : (parseFloat(maxHeight) / 100) * windowHeight;
 }
+
+/** Bottom padding kept under the content while the keyboard is open. */
+const KEYBOARD_PADDING_BOTTOM = 12;
 
 export interface BottomSheetRef {
     dismiss: (onDone?: () => void) => void;
@@ -55,15 +60,24 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         const maxHeightPx = toPixels(maxHeight, windowHeight);
         const sheetY = useSharedValue(windowHeight);
         const backdropOpacity = useSharedValue(0);
-        const keyboard = useAnimatedKeyboard();
+        // The sheet renders in the main window (AppModal), where
+        // react-native-keyboard-controller tracks the keyboard reliably even
+        // though the app is edge-to-edge and Android never resizes the window.
+        // `height` is negative while the keyboard is open.
+        const keyboard = useReanimatedKeyboardAnimation();
+        const keyboardPaddingBottom = Math.min(paddingBottom, KEYBOARD_PADDING_BOTTOM);
         const sheetStyle = useAnimatedStyle(() => {
-            const keyboardLift = keyboardAvoiding ? keyboard.height.value : 0;
+            const keyboardLift = keyboardAvoiding ? -keyboard.height.value : 0;
+            const keyboardProgress = keyboardAvoiding ? keyboard.progress.value : 0;
             // Shrink while the keyboard is up so the sheet's header (and close
             // button) is never pushed above the top of the screen.
             const available = windowHeight - keyboardLift - topInset;
             return {
                 transform: [{ translateY: sheetY.value - keyboardLift }],
                 maxHeight: Math.min(maxHeightPx, available),
+                // The bottom padding clears the navigation bar; the keyboard
+                // covers that, so give the space back to the form while typing.
+                paddingBottom: interpolate(keyboardProgress, [0, 1], [paddingBottom, keyboardPaddingBottom]),
             };
         });
         const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
@@ -106,7 +120,6 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
                         borderTopRightRadius: borderTopRadius,
                         paddingHorizontal,
                         paddingTop,
-                        paddingBottom,
                         overflow: 'hidden',
                         borderTopWidth: 1,
                         borderColor: colors.divider,
@@ -136,7 +149,7 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         );
 
         return (
-            <Modal visible={visible} animationType="none" transparent statusBarTranslucent onRequestClose={() => dismiss()}>
+            <AppModal visible={visible} animationType="none" transparent onRequestClose={() => dismiss()}>
                 <View style={StyleSheet.absoluteFillObject}>
                     <Animated.View
                         style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.overlay }, backdropStyle]}
@@ -153,7 +166,7 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
                         {sheet}
                     </View>
                 </View>
-            </Modal>
+            </AppModal>
         );
     }
 );

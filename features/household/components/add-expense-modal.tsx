@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AmountInput, BottomSheet, BottomSheetRef, SheetHeader, ThemedText } from '@/components/common';
+import { AmountInput, BottomSheet, BottomSheetRef, FormScrollView, SheetHeader, ThemedText } from '@/components/common';
 import { CalendarPicker, toLocalDateStr } from '@/components/common/calendar-picker';
 import { CategoryChips } from '@/features/transactions/components/category-chips';
 import { useCategories } from '@/features/categories/hooks/use-categories';
@@ -15,7 +15,6 @@ import {
     ActivityIndicator,
     Keyboard,
     Pressable,
-    ScrollView,
     TextInput,
     View,
 } from 'react-native';
@@ -150,7 +149,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, editingExpense, c
         >
             <SheetHeader title={isEditing ? 'Edit Expense' : 'Add Expense'} onClose={handleClose} />
 
-            <ScrollView
+            <FormScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 24 }}
@@ -230,7 +229,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, editingExpense, c
                         </ThemedText>
                     }
                 </Pressable>
-            </ScrollView>
+            </FormScrollView>
         </BottomSheet>
     );
 }

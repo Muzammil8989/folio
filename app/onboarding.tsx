@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarPicker } from '@/features/onboarding/components/avatar-picker';
@@ -15,6 +15,8 @@ import { IntroService } from '@/features/onboarding/services/intro-service';
 import { ContinueButton } from '@/features/onboarding/components/continue-button';
 import { OnboardingHeader } from '@/features/onboarding/components/onboarding-header';
 import { ProfileForm } from '@/features/onboarding/components/profile-form';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { FormScrollView } from '@/components/common';
 
 export default function OnboardingScreen() {
     const { profile, updateProfile } = useUser();
@@ -127,9 +129,9 @@ export default function OnboardingScreen() {
             <StatusBar style="light" />
             <KeyboardAvoidingView
                 className="flex-1"
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
             >
-                <ScrollView
+                <FormScrollView
                     className="flex-1"
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
@@ -153,7 +155,7 @@ export default function OnboardingScreen() {
                         </View>
                         <ContinueButton onPress={handleContinue} isLoading={isLoading} />
                     </View>
-                </ScrollView>
+                </FormScrollView>
             </KeyboardAvoidingView>
         </View>
     );

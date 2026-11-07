@@ -1,4 +1,4 @@
-import { EmptyState, ScreenHeader, ThemedText } from '@/components/common';
+import { AppModal, EmptyState, ScreenHeader, ThemedText } from '@/components/common';
 import { AccountFormModal } from '@/features/accounts/components/account-form-modal';
 import { AccountRow } from '@/features/accounts/components/account-row';
 import { useUser } from '@/features/user/context/user-context';
@@ -15,10 +15,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     InteractionManager,
-    Modal,
     Pressable,
     ScrollView,
-    View
+    View,
 } from 'react-native';
 import Animated, { Easing, FadeInUp, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,7 +36,7 @@ function DeleteConfirmSheet({
     const colors = useThemeColors();
     const insets = useSafeAreaInsets();
     return (
-        <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
+        <AppModal visible animationType="fade" transparent onRequestClose={onCancel}>
             <View className="flex-1 justify-end bg-black/50">
                 <Animated.View
                     entering={FadeInUp.duration(300).easing(Easing.out(Easing.cubic))}
@@ -90,7 +89,7 @@ function DeleteConfirmSheet({
                     </View>
                 </Animated.View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }
 

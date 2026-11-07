@@ -23,6 +23,8 @@ describe('database integrity', () => {
     expect(columns('transactions')).toEqual(expect.arrayContaining(['transfer_group', 'savings_goal_id']));
     expect(columns('loans')).toContain('origin_transaction_id');
     expect(columns('household_expenses')).toContain('linked_transaction_id');
+    expect(columns('household_periods_history')).toContain('entries_kept');
+    expect(columns('household_config')).toContain('income_confirmed');
   });
 
   it('cascades budget deletion when its category is deleted', async () => {

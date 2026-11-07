@@ -1,7 +1,7 @@
-import { ThemedText } from '@/components/common';
+import { AppModal, ThemedText } from '@/components/common';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import React from 'react';
-import { ActivityIndicator, Modal, Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
 interface FormPrerequisitesModalProps {
     visible: boolean;
@@ -21,7 +21,7 @@ export function FormPrerequisitesModal({ visible, onClose, loading, hasCategorie
     const missing = !hasAccounts ? 'payment method' : !hasCategories ? 'category' : null;
 
     return (
-        <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+        <AppModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
             <View className="flex-1 justify-center items-center bg-black/40 px-8">
                 <View className="bg-surface dark:bg-dark-surface rounded-xl p-8 w-full items-center">
                     {loading || !missing ? (
@@ -49,6 +49,6 @@ export function FormPrerequisitesModal({ visible, onClose, loading, hasCategorie
                     </Pressable>
                 </View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }

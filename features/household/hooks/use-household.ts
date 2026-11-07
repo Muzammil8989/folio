@@ -34,6 +34,13 @@ const MONTH_NAMES = [
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
+/** "Jun 18 – Jul 17, 2026" for a period's inclusive "YYYY-MM-DD" bounds. */
+export function formatPeriodRange(startISO: string, endISO: string): string {
+    const [, sm, sd] = startISO.split('-').map(Number);
+    const [ey, em, ed] = endISO.split('-').map(Number);
+    return `${MONTH_NAMES[sm - 1]} ${sd} – ${MONTH_NAMES[em - 1]} ${ed}, ${ey}`;
+}
+
 /** Parse an ISO-ish "YYYY-MM-DD" string as a local-time Date (no UTC shift) */
 function parseLocalDate(iso: string): Date {
     const [y, m, d] = iso.split('-').map(Number);
@@ -118,8 +125,9 @@ export function useHousehold() {
                 return;
             }
 
-            // Roll forward any elapsed cycles: archive each one and advance period_start_date.
-            // Each cycle (total in SQL, archive, clear, advance) is one DB transaction.
+            // Roll forward any elapsed months: archive each one to history (its
+            // expenses stay, listed under that month) and advance period_start_date.
+            // Each month (total in SQL, archive, advance) is one DB transaction.
             // Bounded loop so an unlucky clock skew can never spin forever.
             const todayISO = toISO(new Date());
             for (let i = 0; i < 240; i++) {
@@ -134,7 +142,8 @@ export function useHousehold() {
                     income_amount: cfg.income_amount,
                     next_start_date: nextStart,
                 });
-                cfg = { ...cfg, period_start_date: nextStart };
+                // The new month starts with last month's income as a suggestion.
+                cfg = { ...cfg, period_start_date: nextStart, income_confirmed: false };
             }
 
             const range = computePeriodRange(cfg);
@@ -161,5 +170,9 @@ export function useHousehold() {
         refresh();
     }, [refresh]);
 
-    return { config, expenses, summary, periodRange, loading, refresh };
+    // False right after a new month starts: its income is last month's amount
+    // carried over until the user keeps or changes it.
+    const incomeConfirmed = config?.income_confirmed ?? true;
+
+    return { config, expenses, summary, periodRange, loading, refresh, incomeConfirmed };
 }

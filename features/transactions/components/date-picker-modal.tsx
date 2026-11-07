@@ -1,9 +1,9 @@
-import { ThemedText } from '@/components/common';
+import { AppModal, ThemedText } from '@/components/common';
 import { shadows } from '@/theme/shadows';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import tokens from '@/theme/tokens';
 
@@ -75,7 +75,7 @@ export function DatePickerModal({
     }, [year, month]);
 
     return (
-        <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+        <AppModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
             <View className="flex-1 justify-center items-center px-5 bg-black/40">
                 {/* M3 Elevated card — bg-surfaceAlt + shadow, no border */}
                 <View
@@ -222,7 +222,7 @@ export function DatePickerModal({
                     </View>
                 </View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }
 

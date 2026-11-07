@@ -1,9 +1,9 @@
-import { ThemedText } from '@/components/common';
+import { AppModal, ThemedText } from '@/components/common';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { IoniconsName } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 interface Account {
     id: number;
@@ -25,7 +25,7 @@ export function AccountPicker({ visible, accounts, selectedAccountId, onSelect, 
     const colors = useThemeColors();
 
     return (
-        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <AppModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
             <Pressable onPress={onClose} style={styles.overlay}>
                 <Pressable style={[styles.card, { backgroundColor: colors.surface }]}>
                     <ThemedText style={{ fontSize: 20, fontWeight: '700', marginBottom: 20, color: colors.textPrimary }}>Select Payment Method</ThemedText>
@@ -74,7 +74,7 @@ export function AccountPicker({ visible, accounts, selectedAccountId, onSelect, 
                     </Pressable>
                 </Pressable>
             </Pressable>
-        </Modal>
+        </AppModal>
     );
 }
 

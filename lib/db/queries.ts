@@ -33,6 +33,7 @@ import {
 
 import type {
   HouseholdExpense,
+  HouseholdPeriodHistory,
   NewAccount,
   NewBudget,
   NewCategory,
@@ -1165,29 +1166,63 @@ export async function getHouseholdConfig() {
   return rows[0] ?? null;
 }
 
+/**
+ * Thrown when the current household month would start inside a month that is
+ * already in history: its expenses would then be counted in both.
+ */
+export class HouseholdPeriodOverlapError extends Error {
+  constructor(public readonly lastArchivedEnd: string) {
+    super(`The household period must start after ${lastArchivedEnd}, the end of the last month in history.`);
+    this.name = 'HouseholdPeriodOverlapError';
+  }
+}
+
+/** End date of the most recent month in household history, or null if there is none. */
+export async function getLastHouseholdHistoryEnd(): Promise<string | null> {
+  const db = getDb();
+  const [row] = await db
+    .select({ end: sql<string | null>`max(${householdPeriodsHistory.end_date})` })
+    .from(householdPeriodsHistory);
+  return row?.end ?? null;
+}
+
 /** Create config on first setup, update it on subsequent edits.
+ *  The income set here is the current month's only: past months keep their own
+ *  income in history. Saving it confirms the month's income.
  *  anchor_day is derived from the chosen start date's day-of-month so monthly/yearly
  *  cycles can recover the intended day after a short month clamps it (31 → Feb 28 → Mar 31). */
 export async function upsertHouseholdConfig(
-  data: Omit<NewHouseholdConfig, 'id' | 'created_at' | 'updated_at' | 'anchor_day'>,
+  data: Omit<NewHouseholdConfig, 'id' | 'created_at' | 'updated_at' | 'anchor_day' | 'income_confirmed'>,
 ) {
   const db = getDb();
+  const lastArchivedEnd = await getLastHouseholdHistoryEnd();
+  if (lastArchivedEnd && data.period_start_date <= lastArchivedEnd) {
+    throw new HouseholdPeriodOverlapError(lastArchivedEnd);
+  }
   const existing = await getHouseholdConfig();
   const now = new Date().toISOString();
   const anchor_day = parseInt(data.period_start_date.slice(8, 10), 10) || 1;
   if (existing) {
     const result = await db
       .update(householdConfig)
-      .set({ ...data, anchor_day, updated_at: now })
+      .set({ ...data, anchor_day, income_confirmed: true, updated_at: now })
       .where(eq(householdConfig.id, existing.id))
       .returning();
     return result[0];
   }
   const result = await db
     .insert(householdConfig)
-    .values({ ...data, anchor_day, created_at: now, updated_at: now })
+    .values({ ...data, anchor_day, income_confirmed: true, created_at: now, updated_at: now })
     .returning();
   return result[0];
+}
+
+/** Keep the income carried over from last month as this month's income. */
+export async function confirmHouseholdIncome() {
+  const db = getDb();
+  await db
+    .update(householdConfig)
+    .set({ income_confirmed: true, updated_at: new Date().toISOString() });
 }
 
 /** Update the period start date when user resets/starts a new period */
@@ -1373,10 +1408,12 @@ export async function clearHouseholdExpensesByRange(startDate: string, endDate: 
 }
 
 /**
- * Close one elapsed household cycle atomically: total its expenses in SQL,
- * archive the summary, clear the cycle's expenses and move the config to
- * `nextStart`. A crash mid-way can no longer archive without clearing (or
- * clear without archiving).
+ * Close one elapsed household month atomically: archive it to history with
+ * its own income and totals, and move the config to `next_start_date`.
+ *
+ * The month's expenses are kept (they belong to that month and are listed in
+ * its history entry). The next month starts with this month's income as a
+ * suggestion that the user is asked to confirm or change.
  */
 export async function rollOverHouseholdPeriod(cycle: {
   period: 'monthly' | 'weekly' | 'yearly';
@@ -1400,6 +1437,7 @@ export async function rollOverHouseholdPeriod(cycle: {
       spent_amount: spent,
       remaining_amount: cycle.income_amount - spent,
       expense_count: Number(totals?.count) || 0,
+      entries_kept: true,
     };
     const [existing] = t
       .select({ id: householdPeriodsHistory.id })
@@ -1414,9 +1452,8 @@ export async function rollOverHouseholdPeriod(cycle: {
         .values({ ...summary, start_date: cycle.start_date, end_date: cycle.end_date, created_at: new Date().toISOString() })
         .run();
     }
-    t.delete(householdExpenses).where(inRange).run();
     t.update(householdConfig)
-      .set({ period_start_date: cycle.next_start_date, updated_at: new Date().toISOString() })
+      .set({ period_start_date: cycle.next_start_date, income_confirmed: false, updated_at: new Date().toISOString() })
       .run();
   });
 }
@@ -1467,19 +1504,89 @@ export async function archiveHouseholdPeriod(entry: {
   });
 }
 
-/** List archived household periods, newest first */
-export async function listHouseholdHistory() {
+/** One past household month. Totals are live when its expenses were kept. */
+export type HouseholdHistoryEntry = HouseholdPeriodHistory;
+
+function householdHistoryQuery() {
   const db = getDb();
+  const h = householdPeriodsHistory;
+  const inMonth = sql`${householdExpenses.date} >= ${h.start_date} and ${householdExpenses.date} <= ${h.end_date}`;
   return db
-    .select()
-    .from(householdPeriodsHistory)
-    .orderBy(desc(householdPeriodsHistory.start_date), desc(householdPeriodsHistory.id));
+    .select({
+      row: h,
+      liveSpent: sql<number>`coalesce((select sum(${householdExpenses.amount}) from ${householdExpenses} where ${inMonth}), 0)`,
+      liveCount: sql<number>`(select count(*) from ${householdExpenses} where ${inMonth})`,
+    })
+    .from(h);
 }
 
-/** Remove an archived household period entry by id */
+function toHistoryEntry({ row, liveSpent, liveCount }: {
+  row: HouseholdPeriodHistory;
+  liveSpent: number;
+  liveCount: number;
+}): HouseholdHistoryEntry {
+  // Months closed before DB v12 lost their expenses: keep their stored totals.
+  if (!row.entries_kept) return row;
+  const spent = Number(liveSpent) || 0;
+  return {
+    ...row,
+    spent_amount: spent,
+    remaining_amount: row.income_amount - spent,
+    expense_count: Number(liveCount) || 0,
+  };
+}
+
+/** List archived household months, newest first. */
+export async function listHouseholdHistory(): Promise<HouseholdHistoryEntry[]> {
+  const rows = await householdHistoryQuery().orderBy(
+    desc(householdPeriodsHistory.start_date),
+    desc(householdPeriodsHistory.id),
+  );
+  return rows.map(toHistoryEntry);
+}
+
+/** One archived household month, or null. */
+export async function getHouseholdHistoryEntry(id: number): Promise<HouseholdHistoryEntry | null> {
+  const [row] = await householdHistoryQuery().where(eq(householdPeriodsHistory.id, id)).limit(1);
+  return row ? toHistoryEntry(row) : null;
+}
+
+/** Change one past month's income. Other months, and the current one, are untouched. */
+export async function updateHouseholdHistoryIncome(id: number, incomeAmount: number) {
+  if (!(incomeAmount > 0)) throw new Error('Income must be greater than zero');
+  const db = getDb();
+  await db
+    .update(householdPeriodsHistory)
+    .set({
+      income_amount: incomeAmount,
+      // Only used for months whose expenses are gone (stored totals).
+      remaining_amount: sql`${incomeAmount} - ${householdPeriodsHistory.spent_amount}`,
+    })
+    .where(eq(householdPeriodsHistory.id, id));
+}
+
+/**
+ * Remove a month from household history, together with its expenses (they
+ * belong to that month only). Account transactions linked to its transfers
+ * are kept: that money really reached the account.
+ */
 export async function deleteHouseholdHistoryEntry(id: number) {
   const db = getDb();
-  await db.delete(householdPeriodsHistory).where(eq(householdPeriodsHistory.id, id));
+  db.transaction((t) => {
+    const [entry] = t
+      .select()
+      .from(householdPeriodsHistory)
+      .where(eq(householdPeriodsHistory.id, id))
+      .limit(1)
+      .all();
+    if (!entry) return;
+    if (entry.entries_kept) {
+      t.delete(householdExpenses)
+        .where(and(gte(householdExpenses.date, entry.start_date), lte(householdExpenses.date, entry.end_date)))
+        .run();
+    }
+    t.delete(householdPeriodsHistory).where(eq(householdPeriodsHistory.id, id)).run();
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

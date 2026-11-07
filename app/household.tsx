@@ -1,4 +1,4 @@
-import { EmptyState, Fab, ScreenHeader, ThemedText } from '@/components/common';
+import { AppModal, EmptyState, Fab, ScreenHeader, ThemedText } from '@/components/common';
 import { IncomeCard } from '@/features/household/components/income-card';
 import { SummaryBar } from '@/features/household/components/summary-bar';
 import { ExpenseItem } from '@/features/household/components/expense-item';
@@ -9,7 +9,7 @@ import { useHousehold } from '@/features/household/hooks/use-household';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useUser } from '@/features/user/context/user-context';
 import { UserService } from '@/features/user/services/user-service';
-import { deleteHouseholdExpenseWithLink, HouseholdExpenseWithCategory } from '@/lib/db/queries';
+import { confirmHouseholdIncome, deleteHouseholdExpenseWithLink, HouseholdExpenseWithCategory } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,6 @@ import {
     ActivityIndicator,
     FlatList,
     ListRenderItem,
-    Modal,
     Pressable,
     View,
 } from 'react-native';
@@ -44,7 +43,7 @@ function DeleteConfirmSheet({
     const insets = useSafeAreaInsets();
 
     return (
-        <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
+        <AppModal visible animationType="fade" transparent onRequestClose={onCancel}>
             <View className="flex-1 justify-end bg-black/50">
                 <Animated.View
                     entering={FadeInUp.duration(300).easing(Easing.out(Easing.cubic))}
@@ -102,7 +101,68 @@ function DeleteConfirmSheet({
                     </View>
                 </Animated.View>
             </View>
-        </Modal>
+        </AppModal>
+    );
+}
+
+const PERIOD_NOUN = { monthly: 'month', weekly: 'week', yearly: 'year' } as const;
+
+/** Shown when a new month has started: its income is last month's, carried over. */
+function NewPeriodIncomeBanner({
+    period,
+    amount,
+    busy,
+    onKeep,
+    onChange,
+}: {
+    period: keyof typeof PERIOD_NOUN;
+    amount: string;
+    busy: boolean;
+    onKeep: () => void;
+    onChange: () => void;
+}) {
+    const colors = useThemeColors();
+    const noun = PERIOD_NOUN[period];
+    return (
+        <View
+            className="p-4 rounded-xl mb-4"
+            style={{ backgroundColor: `${colors.primary}12`, borderWidth: 1, borderColor: `${colors.primary}30` }}
+            accessibilityRole="alert"
+        >
+            <View className="flex-row items-center gap-2 mb-1">
+                <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                <ThemedText className="font-semibold text-sm" style={{ color: colors.primary }}>
+                    {`New ${noun} started`}
+                </ThemedText>
+            </View>
+            <ThemedText className="text-xs mb-3 text-textSecondary dark:text-dark-textSecondary">
+                {`Last ${noun} was saved to History. Set this ${noun}'s household income: it is ${amount} for now, the same as last ${noun}.`}
+            </ThemedText>
+            <View className="flex-row gap-2">
+                <Pressable
+                    onPress={onKeep}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    className="flex-1 py-2.5 rounded-xl items-center"
+                    style={{ backgroundColor: colors.primary }}
+                >
+                    {busy
+                        ? <ActivityIndicator color="#fff" />
+                        : <ThemedText className="text-xs font-semibold text-white">{`Keep ${amount}`}</ThemedText>}
+                </Pressable>
+                <Pressable
+                    onPress={onChange}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    className="flex-1 py-2.5 rounded-xl items-center"
+                    style={{ borderWidth: 1, borderColor: colors.primary }}
+                >
+                    <ThemedText className="text-xs font-semibold" style={{ color: colors.primary }}>
+                        Change amount
+                    </ThemedText>
+                </Pressable>
+            </View>
+        </View>
     );
 }
 
@@ -112,7 +172,22 @@ export default function HouseholdScreen() {
     const { profile } = useUser();
     const currencyCode = profile.currency;
 
-    const { config, expenses, summary, periodRange, loading, refresh } = useHousehold();
+    const { config, expenses, summary, periodRange, loading, refresh, incomeConfirmed } = useHousehold();
+    const [isConfirmingIncome, setIsConfirmingIncome] = useState(false);
+
+    // A new month started with last month's income carried over: keep it as-is.
+    const keepCarriedIncome = async () => {
+        setIsConfirmingIncome(true);
+        try {
+            await confirmHouseholdIncome();
+            await refresh();
+        } catch (e) {
+            logger.error('HouseholdScreen: confirm income failed', e);
+            toast.error('Failed to save income');
+        } finally {
+            setIsConfirmingIncome(false);
+        }
+    };
 
     const [incomeModalVisible, setIncomeModalVisible] = useState(false);
     const [addExpenseVisible, setAddExpenseVisible] = useState(false);
@@ -207,6 +282,17 @@ export default function HouseholdScreen() {
                             style={{ paddingHorizontal: 20 }}
                             entering={FadeInDown.duration(350).easing(Easing.out(Easing.cubic))}
                         >
+                            {/* New month: confirm or change its income (each month has its own) */}
+                            {!incomeConfirmed && (
+                                <NewPeriodIncomeBanner
+                                    period={config.period}
+                                    amount={UserService.formatCurrency(config.income_amount, currencyCode)}
+                                    busy={isConfirmingIncome}
+                                    onKeep={keepCarriedIncome}
+                                    onChange={() => setIncomeModalVisible(true)}
+                                />
+                            )}
+
                             {/* Income Card */}
                             <IncomeCard
                                 config={config}
@@ -271,7 +357,7 @@ export default function HouseholdScreen() {
                             <EmptyState
                                 icon="home-outline"
                                 title="Set Up Household Budget"
-                                subtitle={`Track your home expenses separately.\nSet one income and log all household expenses against it.`}
+                                subtitle={`Track your home expenses separately.\nSet this month's income and log household expenses against it. Every month keeps its own income and expenses in History.`}
                                 actionLabel="Get Started"
                                 onAction={() => setIncomeModalVisible(true)}
                                 iconColor={colors.primary}

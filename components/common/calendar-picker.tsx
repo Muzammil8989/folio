@@ -2,10 +2,11 @@ import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { DimensionValue, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { DimensionValue, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInUp, FadeOutDown } from 'react-native-reanimated';
 import { ThemedText } from './themed-text';
+import { AppModal } from './app-modal';
 
 const MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -104,7 +105,7 @@ export function CalendarPicker({
     ].filter(qa => !minimumDate || qa.date >= minimumDate);
 
     return (
-        <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+        <AppModal visible transparent animationType="none" onRequestClose={onClose}>
             <Pressable onPress={onClose} style={styles.backdrop} />
             <Animated.View
                 entering={FadeInUp.duration(250)}
@@ -221,7 +222,7 @@ export function CalendarPicker({
                 </View>
             )}
             </Animated.View>
-        </Modal>
+        </AppModal>
     );
 }
 

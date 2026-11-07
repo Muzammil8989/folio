@@ -21,7 +21,7 @@ import {
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { ActivityIndicator, AppState, InteractionManager, LogBox, StyleSheet, TextInput, View } from 'react-native';
+import { AppState, InteractionManager, LogBox, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -31,19 +31,24 @@ import Animated, {
 } from 'react-native-reanimated';
 import '../global.css';
 
-import { ErrorBoundary, LockScreen, ObscuredContent } from '@/components/layouts';
-import { ErrorRetry, ThemedText } from '@/components/common';
+import {
+  DatabaseGate,
+  ErrorBoundary,
+  FontsReadyContext,
+  LockScreen,
+  ObscuredContent,
+  StartupScreen,
+} from '@/components/layouts';
+import { PortalHost, PortalProvider, ThemedText, usePortalActive } from '@/components/common';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { darkColors, lightColors } from '@/theme/colors';
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { logger } from '@/lib/logger';
-import { SQLiteDatabase, SQLiteProvider } from 'expo-sqlite';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AuthProvider, useAuth } from '@/features/auth/context/auth-context';
 import { ModalProvider, useModalActions } from '@/providers/modal-context';
 import { UserProvider, useUser } from '@/features/user/context/user-context';
-import { setDbInstance } from '@/lib/db/db-client';
-import { DatabaseMigrationError, initializeDatabase } from '@/lib/db/migrations';
 import React, { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '@/features/notifications/services/notification-service';
@@ -52,49 +57,10 @@ import { processRecurringTransactions } from '@/features/recurring/services/recu
 const PRIMARY_COLOR = lightColors.primary;
 const OVERLAY_FADE_MS = 220;
 const AUTO_BACKUP_DELAY_MS = 1500;
-const DB_OPEN_TIMEOUT_MS = 20_000;
-const SPLASH_FAILSAFE_MS = 10_000;
 // Custom fonts are cosmetic: never let a stalled font load hold up launch.
 const FONT_LOAD_TIMEOUT_MS = 4_000;
-
-/** What has finished during launch; logged by the splash failsafe. */
-const startupProgress = { fonts: false, database: false, auth: false, profile: false };
-
-const STARTUP_STEP_LABELS: Record<keyof typeof startupProgress, string> = {
-  fonts: 'fonts',
-  database: 'database',
-  auth: 'security settings',
-  profile: 'profile',
-};
-
-/**
- * Shown while launch work is still pending, in place of an empty (black) root
- * view. Matches the native splash colour. If launch takes unusually long it
- * says which step is still pending, so a stuck start is visible and reportable.
- */
-function StartupScreen() {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setSlow(true), SPLASH_FAILSAFE_MS);
-    return () => clearTimeout(timer);
-  }, []);
-  const pending = (Object.keys(startupProgress) as (keyof typeof startupProgress)[])
-    .filter((step) => !startupProgress[step])
-    .map((step) => STARTUP_STEP_LABELS[step]);
-
-  return (
-    <View style={[StyleSheet.absoluteFillObject, styles.startup]}>
-      <ActivityIndicator size="large" color="#FFFFFF" />
-      {slow && (
-        <ThemedText style={styles.startupText}>
-          {pending.length
-            ? `Folio is taking longer than usual to start.\nWaiting for: ${pending.join(', ')}`
-            : 'Folio is taking longer than usual to start.'}
-        </ThemedText>
-      )}
-    </View>
-  );
-}
+// Never leave the user staring at the native splash past this.
+const SPLASH_FAILSAFE_MS = 10_000;
 
 /**
  * Run non-urgent launch work once the first interactions/animations settle,
@@ -114,18 +80,6 @@ function runAfterStartup(fn: () => void, delayMs: number) {
 }
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
-
-// Migrations run in transactions, so a failure leaves the data as it was.
-// The error surfaces in DatabaseGate (retry screen) instead of wiping the DB.
-const initDb = async (db: SQLiteDatabase) => {
-  try {
-    await initializeDatabase(db);
-    setDbInstance(db);
-  } catch (e) {
-    logger.error('Database initialization failed', e);
-    throw e;
-  }
-};
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
@@ -182,8 +136,6 @@ function RootLayoutContent() {
   const { isLocked, isSecurityEnabled, isLoading: isAuthLoading } = useAuth();
   const { profile, isLoading: isUserLoading } = useUser();
   const isLoading = isAuthLoading || isUserLoading;
-  startupProgress.auth = !isAuthLoading;
-  startupProgress.profile = !isUserLoading;
 
   // Keep the native splash up until the user profile (which carries the
   // theme preference) has actually loaded. Hiding the splash on fonts-loaded
@@ -331,6 +283,8 @@ function RootLayoutContent() {
   }, [mounted, isLoading, profile.isOnboarded]);
 
   const showLock = isSecurityEnabled && isLocked;
+  // A sheet or dialog is open over the app (rendered by PortalHost below).
+  const overlayOpen = usePortalActive();
 
   // Privacy cover: with a PIN set, hide balances from the app switcher
   // snapshot (taken while the app is inactive / backgrounded).
@@ -362,7 +316,7 @@ function RootLayoutContent() {
         // Hidden from screen readers while the lock screen / privacy cover is up:
         // those overlays only cover it visually.
         <ObscuredContent
-          hidden={showLock || showPrivacyCover}
+          hidden={showLock || showPrivacyCover || overlayOpen}
           style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? APP_DARK_BG : APP_LIGHT_BG }}
         >
         <View style={{ flex: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH, alignSelf: 'center' }}>
@@ -391,6 +345,7 @@ function RootLayoutContent() {
           <Stack.Screen name="recurring" options={opaqueContent} />
           <Stack.Screen name="household" options={opaqueContent} />
           <Stack.Screen name="household-history" options={opaqueContent} />
+          <Stack.Screen name="household-period" options={opaqueContent} />
           <Stack.Screen name="loans" options={opaqueContent} />
           <Stack.Screen name="terms" options={opaqueContent} />
           <Stack.Screen name="privacy" options={opaqueContent} />
@@ -401,6 +356,10 @@ function RootLayoutContent() {
       )}
 
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+
+      {/* Sheets and dialogs (AppModal): above every screen and the tab bar,
+          below the privacy cover and lock screen so those always cover them. */}
+      <PortalHost />
 
       {showPrivacyCover && (
         <View
@@ -434,86 +393,10 @@ function RootLayoutContent() {
             },
           ]}
         >
-          <ActivityIndicator size="large" color="#FFFFFF" />
+          <StartupScreen />
         </Animated.View>
       )}
     </ThemeProvider>
-  );
-}
-
-/**
- * Opens the database and runs migrations. A failed migration is rolled back
- * and reported here with a retry: user data is never wiped automatically.
- */
-function DatabaseGate({ children }: { children: React.ReactNode }) {
-  const [error, setError] = useState<Error | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [ready, setReady] = useState(false);
-
-  // Stable identity: SQLiteProvider re-opens the database whenever onInit changes.
-  const onInit = React.useCallback(async (db: SQLiteDatabase) => {
-    await initDb(db);
-    startupProgress.database = true;
-    setReady(true);
-  }, []);
-
-  // Watchdog: never leave the user on the splash screen if opening the
-  // database stalls. Show the retry screen instead.
-  useEffect(() => {
-    if (ready || error) return;
-    const timer = setTimeout(() => {
-      logger.error(`Database did not open within ${DB_OPEN_TIMEOUT_MS} ms`);
-      setError(new Error('Database open timed out'));
-    }, DB_OPEN_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [ready, error, attempt]);
-
-  if (error) {
-    // A file written by a newer app version can't be opened by this one; retrying won't help.
-    const isDowngrade = error instanceof DatabaseMigrationError && error.reason === 'downgrade';
-    return (
-      <DatabaseErrorScreen
-        message={
-          isDowngrade
-            ? 'Your data was saved by a newer version of Folio. Please update the app to open it. Nothing has been deleted.'
-            : `Folio couldn't open your data. Nothing has been deleted. Try again, or restart the app.\n\nDetails: ${error.message}`
-        }
-        onRetry={() => {
-          setError(null);
-          setReady(false);
-          setAttempt(a => a + 1);
-        }}
-      />
-    );
-  }
-
-  // SQLiteProvider renders nothing until the database is open, which would
-  // leave a black screen once the splash hides. Cover that gap.
-  return (
-    <>
-      <SQLiteProvider key={attempt} databaseName="folio.db" onInit={onInit} onError={setError}>
-        {children}
-      </SQLiteProvider>
-      {!ready && <StartupScreen />}
-    </>
-  );
-}
-
-function DatabaseErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const colorScheme = useColorScheme();
-  useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: 'center',
-        backgroundColor: colorScheme === 'dark' ? APP_DARK_BG : APP_LIGHT_BG,
-      }}
-    >
-      <ErrorRetry message={message} onRetry={onRetry} />
-    </View>
   );
 }
 
@@ -559,47 +442,40 @@ export default function RootLayout() {
 
   // Failsafe: never leave the user staring at the native splash. If startup
   // hasn't finished after this long, hide it so whatever is underneath (an
-  // error screen, a spinner) is visible, and log which step is still pending.
+  // error screen, the startup screen) is visible. The startup screen itself
+  // names and logs whichever step is still pending.
   useEffect(() => {
     const timer = setTimeout(() => {
-      logger.error(`Startup still pending after ${SPLASH_FAILSAFE_MS} ms`, startupProgress);
       SplashScreen.hideAsync().catch(() => {});
     }, SPLASH_FAILSAFE_MS);
     return () => clearTimeout(timer);
   }, []);
-  startupProgress.fonts = fontsReady;
 
   // Auth and profile live in SecureStore, not SQLite, so they sit above the
   // database gate and load while migrations run.
+  //
+  // KeyboardProvider tracks the keyboard natively, including inside Modals
+  // (each one is a separate Android window). The app is edge-to-edge, so the
+  // bars are already translucent and must stay that way.
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <AuthProvider>
-          <UserProvider>
-            <DatabaseGate>
-              <ModalProvider>
-                {fontsReady ? <RootLayoutContent /> : <StartupScreen />}
-              </ModalProvider>
-            </DatabaseGate>
-          </UserProvider>
-        </AuthProvider>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
+          <AuthProvider>
+            <UserProvider>
+              <FontsReadyContext.Provider value={fontsReady}>
+                <DatabaseGate>
+                  <ModalProvider>
+                    <PortalProvider>
+                      {fontsReady ? <RootLayoutContent /> : <StartupScreen />}
+                    </PortalProvider>
+                  </ModalProvider>
+                </DatabaseGate>
+              </FontsReadyContext.Provider>
+            </UserProvider>
+          </AuthProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
   );
 }
-
-const styles = StyleSheet.create({
-  startup: {
-    backgroundColor: PRIMARY_COLOR,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  startupText: {
-    marginTop: 20,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-});

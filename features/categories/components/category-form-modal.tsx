@@ -1,4 +1,4 @@
-import { AppButton, ThemedText } from '@/components/common';
+import { AppButton, AppModal, FormScrollView, ThemedText } from '@/components/common';
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { Category, createCategory, updateCategory } from '@/lib/db/queries';
@@ -8,16 +8,13 @@ import tokens from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
     Pressable,
-    ScrollView,
     TextInput,
-    View
+    View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 const CATEGORY_COLORS: string[] = tokens.swatches;
 
@@ -106,16 +103,14 @@ export function CategoryFormModal({ visible, editingCategory, defaultType, onClo
     const iconList = type === 'income' ? INCOME_ICONS : EXPENSE_ICONS;
 
     return (
-        <Modal
+        <AppModal
             visible={visible}
             animationType="slide"
             transparent={true}
-            statusBarTranslucent
-            navigationBarTranslucent
             onRequestClose={onClose}
         >
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
                 style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
             >
                 <Animated.View
@@ -134,7 +129,7 @@ export function CategoryFormModal({ visible, editingCategory, defaultType, onClo
                         </Pressable>
                     </View>
 
-                    <ScrollView
+                    <FormScrollView
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         contentContainerStyle={{ paddingBottom: 24 }}
@@ -249,9 +244,9 @@ export function CategoryFormModal({ visible, editingCategory, defaultType, onClo
                             disabled={isSubmitting}
                             color={type === 'income' ? colors.success : colors.error}
                         />
-                    </ScrollView>
+                    </FormScrollView>
                 </Animated.View>
             </KeyboardAvoidingView>
-        </Modal>
+        </AppModal>
     );
 }
