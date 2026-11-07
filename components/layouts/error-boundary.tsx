@@ -54,7 +54,12 @@ function ErrorFallback({ onReset, error, componentStack }: ErrorFallbackProps) {
           Your data is safe on this phone. Try again, and if this keeps happening, restart the app.
         </ThemedText>
 
-        {/* Technical details only in development builds */}
+        {/* The message alone in release builds, so a crash can be reported; full traces in development only */}
+        {!__DEV__ && (
+          <ThemedText className="text-xs mb-6 text-textMuted dark:text-dark-textMuted" selectable>
+            Details: {message}
+          </ThemedText>
+        )}
         {__DEV__ && (
           <View className="mb-6 border-t border-divider dark:border-dark-divider pt-4">
             <ThemedText type="kicker" className="mb-1">Error message</ThemedText>

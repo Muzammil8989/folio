@@ -54,9 +54,47 @@ const OVERLAY_FADE_MS = 220;
 const AUTO_BACKUP_DELAY_MS = 1500;
 const DB_OPEN_TIMEOUT_MS = 20_000;
 const SPLASH_FAILSAFE_MS = 10_000;
+// Custom fonts are cosmetic: never let a stalled font load hold up launch.
+const FONT_LOAD_TIMEOUT_MS = 4_000;
 
 /** What has finished during launch; logged by the splash failsafe. */
 const startupProgress = { fonts: false, database: false, auth: false, profile: false };
+
+const STARTUP_STEP_LABELS: Record<keyof typeof startupProgress, string> = {
+  fonts: 'fonts',
+  database: 'database',
+  auth: 'security settings',
+  profile: 'profile',
+};
+
+/**
+ * Shown while launch work is still pending, in place of an empty (black) root
+ * view. Matches the native splash colour. If launch takes unusually long it
+ * says which step is still pending, so a stuck start is visible and reportable.
+ */
+function StartupScreen() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), SPLASH_FAILSAFE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  const pending = (Object.keys(startupProgress) as (keyof typeof startupProgress)[])
+    .filter((step) => !startupProgress[step])
+    .map((step) => STARTUP_STEP_LABELS[step]);
+
+  return (
+    <View style={[StyleSheet.absoluteFillObject, styles.startup]}>
+      <ActivityIndicator size="large" color="#FFFFFF" />
+      {slow && (
+        <ThemedText style={styles.startupText}>
+          {pending.length
+            ? `Folio is taking longer than usual to start.\nWaiting for: ${pending.join(', ')}`
+            : 'Folio is taking longer than usual to start.'}
+        </ThemedText>
+      )}
+    </View>
+  );
+}
 
 /**
  * Run non-urgent launch work once the first interactions/animations settle,
@@ -268,7 +306,13 @@ function RootLayoutContent() {
         if (finished) runOnJS(setOverlayVisible)(false);
       },
     );
-    return () => prefetch.cancel();
+    // Backup for the animation callback: if it never fires, the faded overlay
+    // would stay mounted over the app and swallow every touch.
+    const overlayFallback = setTimeout(() => setOverlayVisible(false), OVERLAY_FADE_MS + 500);
+    return () => {
+      prefetch.cancel();
+      clearTimeout(overlayFallback);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, isLoading]);
 
@@ -432,7 +476,7 @@ function DatabaseGate({ children }: { children: React.ReactNode }) {
         message={
           isDowngrade
             ? 'Your data was saved by a newer version of Folio. Please update the app to open it. Nothing has been deleted.'
-            : "Folio couldn't open your data. Nothing has been deleted. Try again, or restart the app."
+            : `Folio couldn't open your data. Nothing has been deleted. Try again, or restart the app.\n\nDetails: ${error.message}`
         }
         onRetry={() => {
           setError(null);
@@ -443,10 +487,15 @@ function DatabaseGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // SQLiteProvider renders nothing until the database is open, which would
+  // leave a black screen once the splash hides. Cover that gap.
   return (
-    <SQLiteProvider key={attempt} databaseName="folio.db" onInit={onInit} onError={setError}>
-      {children}
-    </SQLiteProvider>
+    <>
+      <SQLiteProvider key={attempt} databaseName="folio.db" onInit={onInit} onError={setError}>
+        {children}
+      </SQLiteProvider>
+      {!ready && <StartupScreen />}
+    </>
   );
 }
 
@@ -491,12 +540,22 @@ export default function RootLayout() {
   // Fonts no longer gate the providers: SecureStore reads (auth, profile),
   // migrations and font loading all run in parallel behind the splash. Only
   // the visible UI waits for fonts. A font failure falls back to system fonts
-  // instead of leaving the app blank.
-  const fontsReady = fontsLoaded || !!fontError;
+  // instead of leaving the app blank, and so does a load that never settles.
+  const [fontsTimedOut, setFontsTimedOut] = useState(false);
+  const fontsReady = fontsLoaded || !!fontError || fontsTimedOut;
 
   useEffect(() => {
     if (fontError) logger.error('Font loading failed, using system fonts', fontError);
   }, [fontError]);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) return;
+    const timer = setTimeout(() => {
+      logger.error(`Fonts did not load within ${FONT_LOAD_TIMEOUT_MS} ms, using system fonts`);
+      setFontsTimedOut(true);
+    }, FONT_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [fontsLoaded, fontError]);
 
   // Failsafe: never leave the user staring at the native splash. If startup
   // hasn't finished after this long, hide it so whatever is underneath (an
@@ -519,7 +578,7 @@ export default function RootLayout() {
           <UserProvider>
             <DatabaseGate>
               <ModalProvider>
-                {fontsReady ? <RootLayoutContent /> : null}
+                {fontsReady ? <RootLayoutContent /> : <StartupScreen />}
               </ModalProvider>
             </DatabaseGate>
           </UserProvider>
@@ -528,3 +587,19 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+const styles = StyleSheet.create({
+  startup: {
+    backgroundColor: PRIMARY_COLOR,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  startupText: {
+    marginTop: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+});
