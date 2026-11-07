@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AppButton, BottomSheet, BottomSheetRef, CalendarPicker, SheetHeader, toLocalDateStr } from '@/components/common';
+import { AppButton, BottomSheet, BottomSheetRef, CalendarPicker, FormScrollView, SheetHeader, toLocalDateStr } from '@/components/common';
 import { AccountPicker } from './account-picker';
 import { TransactionFormFields, type TxType } from './transaction-form-fields';
 import { useUser } from '@/features/user/context/user-context';
@@ -14,7 +14,7 @@ import { NewTransaction } from '@/lib/db/schema';
 import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES, UserService } from '@/features/user/services/user-service';
 import React, { useRef, useState } from 'react';
-import { Keyboard, ScrollView, TextInput } from 'react-native';
+import { Keyboard, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface AddTransactionModalProps {
@@ -233,7 +233,7 @@ export function AddTransactionModal({ visible, onClose, onSuccess, initialType =
         >
             <SheetHeader kicker="New transaction" title={transactionType === 'transfer' ? 'Move money' : isIncome ? 'Money in' : 'Money out'} onClose={handleClose} />
 
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+            <FormScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
                 <TransactionFormFields
                     ref={amountInputRef}
                     transactionType={transactionType}
@@ -268,7 +268,7 @@ export function AddTransactionModal({ visible, onClose, onSuccess, initialType =
                 />
 
                 <AppButton label={transactionType === 'transfer' ? 'Save Transfer' : 'Save Transaction'} onPress={handleSubmit} loading={isSubmitting} disabled={isSubmitting} />
-            </ScrollView>
+            </FormScrollView>
         </BottomSheet>
 
         {showDatePicker && <CalendarPicker selectedDate={date} onSelectDate={(d) => { setDate(d); setShowDatePicker(false); }} onClose={() => setShowDatePicker(false)} />}

@@ -1,4 +1,4 @@
-import { AppButton, ThemedText } from '@/components/common';
+import { AppButton, AppModal, FormScrollView, ThemedText } from '@/components/common';
 import type { Category } from '@/features/categories/hooks/use-categories';
 import { processRecurringTransactions } from '@/features/recurring/services/recurring-processor';
 import { CategoryChips } from '@/features/transactions/components/category-chips';
@@ -13,17 +13,14 @@ import { IoniconsName } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
     Pressable,
-    ScrollView,
     TextInput,
     View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FREQUENCY_LABELS, RecurringFrequency, RecurringItem } from './recurring-row';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 interface RecurringFormModalProps {
     visible: boolean;
@@ -126,16 +123,14 @@ export function RecurringFormModal({
     };
 
     return (
-        <Modal
+        <AppModal
             visible={visible}
             animationType="slide"
             transparent
-            statusBarTranslucent
-            navigationBarTranslucent
             onRequestClose={onClose}
         >
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
                 style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
             >
                 <Animated.View
@@ -167,7 +162,7 @@ export function RecurringFormModal({
                         </Pressable>
                     </View>
 
-                    <ScrollView
+                    <FormScrollView
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         contentContainerStyle={{ paddingBottom: 24 }}
@@ -292,9 +287,9 @@ export function RecurringFormModal({
                                 color={isIncome ? colors.success : colors.error}
                             />
                         )}
-                    </ScrollView>
+                    </FormScrollView>
                 </Animated.View>
             </KeyboardAvoidingView>
-        </Modal>
+        </AppModal>
     );
 }

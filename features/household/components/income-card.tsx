@@ -7,10 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 
+/** Each period has its own income: past ones keep theirs in History. */
 const PERIOD_LABELS: Record<string, string> = {
-    monthly: 'Monthly',
-    weekly: 'Weekly',
-    yearly: 'Yearly',
+    monthly: "This month's",
+    weekly: "This week's",
+    yearly: "This year's",
 };
 
 interface IncomeCardProps {
@@ -31,7 +32,7 @@ export function IncomeCard({ config, periodRange, currencyCode, onEdit }: Income
                 <View className="flex-row items-center gap-2">
                     <Ionicons name="home-outline" size={14} color={colors.textMuted} />
                     <ThemedText type="kicker">
-                        {PERIOD_LABELS[config.period]} Household Income
+                        {PERIOD_LABELS[config.period]} household income
                     </ThemedText>
                 </View>
                 <Pressable

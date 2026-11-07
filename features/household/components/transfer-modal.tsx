@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { BottomSheet, BottomSheetRef, SheetHeader, ThemedText } from '@/components/common';
+import { BottomSheet, BottomSheetRef, FormScrollView, SheetHeader, ThemedText } from '@/components/common';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { createHouseholdTransfer, getCategories } from '@/lib/db/queries';
@@ -14,7 +14,6 @@ import {
     ActivityIndicator,
     Keyboard,
     Pressable,
-    ScrollView,
     TextInput,
     View,
 } from 'react-native';
@@ -124,7 +123,7 @@ export function TransferModal({ visible, onClose, onSuccess, remaining, currency
                 Remaining balance will be deducted from household and added to your account. Both entries can be deleted independently.
             </ThemedText>
 
-            <ScrollView
+            <FormScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 24 }}
@@ -255,7 +254,7 @@ export function TransferModal({ visible, onClose, onSuccess, remaining, currency
                         </ThemedText>
                     }
                 </Pressable>
-            </ScrollView>
+            </FormScrollView>
         </BottomSheet>
     );
 }

@@ -1,4 +1,4 @@
-import { AppButton, BottomSheet, BottomSheetRef, CalendarPicker, SheetHeader, ThemedText, toLocalDateStr } from '@/components/common';
+import { AppButton, BottomSheet, BottomSheetRef, CalendarPicker, FormScrollView, SheetHeader, ThemedText, toLocalDateStr } from '@/components/common';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { createSavingsGoal, updateSavingsGoal } from '@/lib/db/queries';
 import type { SavingsGoal } from '@/lib/db/schema';
@@ -97,7 +97,7 @@ export function GoalFormSheet({ goal, onClose, onSuccess, onDelete }: GoalFormSh
             >
                 <SheetHeader kicker={goal ? 'Savings goal' : 'New goal'} title={goal ? goal.name : 'What are you saving for?'} onClose={handleClose} />
 
-                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+                <FormScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
                     {/* Goal Name */}
                     <ThemedText type="kicker" className="mb-2">
                         Goal Name
@@ -248,7 +248,7 @@ export function GoalFormSheet({ goal, onClose, onSuccess, onDelete }: GoalFormSh
                             <ThemedText type="label" style={{ color: colors.expense }}>Delete goal</ThemedText>
                         </Pressable>
                     )}
-                </ScrollView>
+                </FormScrollView>
             </BottomSheet>
 
             {showCalendar && (

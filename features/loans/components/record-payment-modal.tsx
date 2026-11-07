@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AmountInput, AppButton, BottomSheet, BottomSheetRef, ThemedText } from '@/components/common';
+import { AmountInput, AppButton, BottomSheet, BottomSheetRef, FormScrollView, ThemedText } from '@/components/common';
 import { CalendarPicker, toLocalDateStr } from '@/components/common/calendar-picker';
 import { SystemLoanCategoryIds } from '@/features/loans/hooks/use-loans';
 import { useThemeColors } from '@/hooks/use-theme-colors';
@@ -12,7 +12,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
   Pressable,
-  ScrollView,
   TextInput,
   View,
 } from 'react-native';
@@ -150,7 +149,7 @@ export function RecordPaymentModal({ visible, onClose, onSuccess, loan, currency
         </Pressable>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+      <FormScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
         <AmountInput
           ref={amountInputRef}
           value={amount}
@@ -209,7 +208,7 @@ export function RecordPaymentModal({ visible, onClose, onSuccess, loan, currency
           disabled={isSubmitting}
           color={colors.success}
         />
-      </ScrollView>
+      </FormScrollView>
     </BottomSheet>
   );
 }

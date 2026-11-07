@@ -20,8 +20,8 @@ import {
 
 const mockGetConfig = getHouseholdConfig as jest.Mock;
 const mockGetExpenses = getHouseholdExpenses as jest.Mock;
-// Archive + clear + advance happen together in one DB transaction
-// (totals are summed in SQL; see __tests__/integration/perf-queries.test.ts).
+// Archive + advance happen together in one DB transaction; the month's
+// expenses are kept (see __tests__/integration/household-months.test.ts).
 const mockRollOver = rollOverHouseholdPeriod as jest.Mock;
 
 const ORIGINAL_DATE = global.Date;
@@ -59,6 +59,7 @@ function makeConfig(
         period,
         period_start_date,
         anchor_day: anchorDay ?? parseInt(period_start_date.slice(8, 10), 10),
+        income_confirmed: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
     };
@@ -84,12 +85,13 @@ describe('useHousehold — auto-archive rollover', () => {
         await waitFor(() => expect(result.current.loading).toBe(false));
 
         expect(mockRollOver).not.toHaveBeenCalled();
+        expect(result.current.incomeConfirmed).toBe(true);
         expect(result.current.summary).toEqual({ income: 1000, spent: 100, remaining: 900 });
         expect(result.current.periodRange.start).toBe('2026-06-18');
         expect(result.current.periodRange.end).toBe('2026-07-17');
     });
 
-    it('archives a finished cycle, clears its expenses, and rolls forward', async () => {
+    it("archives a finished month and rolls forward, asking for the new month's income", async () => {
         // "Today" is well past the cycle end (Jun 18 → Jul 17). User reopens app on Jul 20.
         freezeDate('2026-07-20T12:00:00.000Z');
         mockGetConfig.mockResolvedValue(makeConfig('2026-06-18', 'monthly'));
@@ -115,6 +117,8 @@ describe('useHousehold — auto-archive rollover', () => {
         expect(result.current.periodRange.start).toBe('2026-07-18');
         expect(result.current.periodRange.end).toBe('2026-08-17');
         expect(result.current.summary).toEqual({ income: 1000, spent: 0, remaining: 1000 });
+        // Last month's income is only a suggestion for the new month.
+        expect(result.current.incomeConfirmed).toBe(false);
     });
 
     it('archives every skipped cycle when the user was away for months', async () => {

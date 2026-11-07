@@ -26,6 +26,9 @@ jest.mock('expo-sqlite', () => ({
   useSQLiteContext: jest.fn(),
 }));
 
+// Official mock: native keyboard tracking isn't available under Jest.
+jest.mock('react-native-keyboard-controller', () => jest.requireActual('react-native-keyboard-controller/jest'));
+
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),

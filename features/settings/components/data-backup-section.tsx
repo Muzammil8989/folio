@@ -1,4 +1,4 @@
-import { AppButton, SheetHeader, ThemedText } from '@/components/common';
+import { AppButton, AppModal, SheetHeader, ThemedText } from '@/components/common';
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { BackupService } from '@/features/backup/services/backup-service';
@@ -7,7 +7,7 @@ import { useModalActions } from '@/providers/modal-context';
 import { useUser } from '@/features/user/context/user-context';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, InteractionManager, Modal, Pressable, View } from 'react-native';
+import { Alert, InteractionManager, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SettingsGroup } from './settings-group';
@@ -158,11 +158,10 @@ export function DataBackupSection({ onRestoreComplete }: { onRestoreComplete?: (
 
             {/* Restore confirmation. A plain Modal (not BottomSheet) so the system file
                 picker can open on top of it; cancelling the picker returns here. */}
-            <Modal
+            <AppModal
                 visible={showRestoreModal}
                 transparent
                 animationType="slide"
-                statusBarTranslucent
                 onRequestClose={() => setShowRestoreModal(false)}
             >
                 <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' }}>
@@ -218,7 +217,7 @@ export function DataBackupSection({ onRestoreComplete }: { onRestoreComplete?: (
                         <AppButton label="Cancel" variant="secondary" onPress={() => setShowRestoreModal(false)} />
                     </View>
                 </View>
-            </Modal>
+            </AppModal>
         </>
     );
 }

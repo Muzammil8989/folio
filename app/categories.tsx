@@ -1,4 +1,4 @@
-import { EmptyState, ScreenHeader, SegmentedControl, ThemedText } from '@/components/common';
+import { AppModal, EmptyState, ScreenHeader, SegmentedControl, ThemedText } from '@/components/common';
 import { CategoryFormModal } from '@/features/categories/components/category-form-modal';
 import { CategoryRow } from '@/features/categories/components/category-row';
 import {
@@ -14,10 +14,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     InteractionManager,
-    Modal,
     Pressable,
     ScrollView,
-    View
+    View,
 } from 'react-native';
 import Animated, { Easing, FadeInUp, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +35,7 @@ function DeleteConfirmSheet({
     const colors = useThemeColors();
     const insets = useSafeAreaInsets();
     return (
-        <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
+        <AppModal visible animationType="fade" transparent onRequestClose={onCancel}>
             <View className="flex-1 justify-end bg-black/50">
                 <Animated.View
                     entering={FadeInUp.duration(300).easing(Easing.out(Easing.cubic))}
@@ -89,7 +88,7 @@ function DeleteConfirmSheet({
                     </View>
                 </Animated.View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }
 

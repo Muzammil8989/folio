@@ -17,8 +17,9 @@ function formatDate(isoDate: string): string {
 interface ExpenseItemProps {
     item: HouseholdExpenseWithCategory;
     currencyCode: string;
-    onEdit: (item: HouseholdExpenseWithCategory) => void;
-    onDelete: (item: HouseholdExpenseWithCategory) => void;
+    /** Omit both to show the entry read-only (e.g. a past month in History). */
+    onEdit?: (item: HouseholdExpenseWithCategory) => void;
+    onDelete?: (item: HouseholdExpenseWithCategory) => void;
 }
 
 export const ExpenseItem = memo(function ExpenseItem({ item, currencyCode, onEdit, onDelete }: ExpenseItemProps) {
@@ -35,8 +36,9 @@ export const ExpenseItem = memo(function ExpenseItem({ item, currencyCode, onEdi
 
     return (
         <Pressable
-            onPress={() => !isTransfer && onEdit(item)}
-            onLongPress={() => onDelete(item)}
+            onPress={onEdit && !isTransfer ? () => onEdit(item) : undefined}
+            onLongPress={onDelete ? () => onDelete(item) : undefined}
+            disabled={!onEdit && !onDelete}
             className="flex-row items-center bg-surface dark:bg-dark-surface border border-divider dark:border-dark-divider rounded-xl p-4 mb-3 overflow-hidden"
         >
             {/* Subtle card gradient */}

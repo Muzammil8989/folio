@@ -1,10 +1,10 @@
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { useThemeColors } from '@/hooks/use-theme-colors';
-import { ThemedText } from '@/components/common';
+import { AppModal, ThemedText } from '@/components/common';
 import { shadows } from '@/theme/shadows';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TimeFilter } from '../utils';
 
@@ -48,7 +48,7 @@ export function FilterModal({
     const insets = useSafeAreaInsets();
 
     return (
-        <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+        <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <View className="flex-1 justify-end bg-black/50">
                 <View
                     className="rounded-t-3xl bg-surfaceAlt dark:bg-dark-surfaceAlt p-6 overflow-hidden"
@@ -197,7 +197,7 @@ export function FilterModal({
                     </Pressable>
                 </View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }
 

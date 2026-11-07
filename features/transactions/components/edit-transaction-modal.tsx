@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AppButton, BottomSheet, BottomSheetRef, CalendarPicker, SheetHeader, toLocalDateStr } from '@/components/common';
+import { AppButton, BottomSheet, BottomSheetRef, CalendarPicker, FormScrollView, SheetHeader, toLocalDateStr } from '@/components/common';
 import { AccountPicker } from './account-picker';
 import { TransactionFormFields } from './transaction-form-fields';
 import { FormPrerequisitesModal } from './form-prerequisites-modal';
@@ -13,7 +13,7 @@ import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES, UserService } from '@/features/user/services/user-service';
 import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, ScrollView, TextInput } from 'react-native';
+import { Keyboard, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface EditTransactionModalProps {
@@ -183,7 +183,7 @@ export function EditTransactionModal({ visible, transaction, onClose, onSuccess 
             >
                 <SheetHeader kicker="Edit transaction" title={isIncome ? 'Money in' : 'Money out'} onClose={handleClose} />
 
-                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+                <FormScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
                 <TransactionFormFields
                     ref={amountInputRef}
                     transactionType={transactionType}
@@ -209,7 +209,7 @@ export function EditTransactionModal({ visible, transaction, onClose, onSuccess 
                 />
 
                 <AppButton label="Save changes" onPress={handleSave} loading={isSubmitting} disabled={isSubmitting} />
-            </ScrollView>
+            </FormScrollView>
             </BottomSheet>
 
             {showDatePicker && (

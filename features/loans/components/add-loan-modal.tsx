@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AmountInput, AppButton, BottomSheet, BottomSheetRef, SheetHeader, ThemedText } from '@/components/common';
+import { AmountInput, AppButton, BottomSheet, BottomSheetRef, FormScrollView, SheetHeader, ThemedText } from '@/components/common';
 import { CalendarPicker, toLocalDateStr } from '@/components/common/calendar-picker';
 import { AccountPicker } from '@/features/transactions/components/account-picker';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
@@ -14,7 +14,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Keyboard,
   Pressable,
-  ScrollView,
   TextInput,
   View,
 } from 'react-native';
@@ -156,7 +155,7 @@ export function AddLoanModal({ visible, onClose, onSuccess, editingLoan, currenc
       >
         <SheetHeader title={isEditing ? 'Edit Loan' : 'Add Loan'} onClose={handleClose} />
 
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+        <FormScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {/* Type Toggle (new loans only) */}
           {!isEditing && (
             <View
@@ -323,7 +322,7 @@ export function AddLoanModal({ visible, onClose, onSuccess, editingLoan, currenc
             disabled={isSubmitting}
             color={accentColor}
           />
-        </ScrollView>
+        </FormScrollView>
       </BottomSheet>
 
       <AccountPicker

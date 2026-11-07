@@ -1,6 +1,6 @@
 import { parseAmount } from '@/lib/utils/currency';
 import tokens from '@/theme/tokens';
-import { AppButton, ThemedText } from '@/components/common';
+import { AppButton, AppModal, FormScrollView, ThemedText } from '@/components/common';
 import { useUser } from '@/features/user/context/user-context';
 import { AccountWithBalance, createAccount, updateAccount } from '@/lib/db/queries';
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
@@ -11,16 +11,13 @@ import { IoniconsName } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
     Pressable,
-    ScrollView,
     TextInput,
-    View
+    View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 type AccountType = 'checking' | 'savings' | 'credit' | 'cash' | 'other';
 
@@ -107,16 +104,14 @@ export function AccountFormModal({ visible, editingAccount, onClose, onSaved }: 
     };
 
     return (
-        <Modal
+        <AppModal
             visible={visible}
             animationType="slide"
             transparent={true}
-            statusBarTranslucent
-            navigationBarTranslucent
             onRequestClose={onClose}
         >
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
                 style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
             >
                 <Animated.View
@@ -135,7 +130,7 @@ export function AccountFormModal({ visible, editingAccount, onClose, onSaved }: 
                         </Pressable>
                     </View>
 
-                    <ScrollView
+                    <FormScrollView
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         contentContainerStyle={{ paddingBottom: 24 }}
@@ -256,9 +251,9 @@ export function AccountFormModal({ visible, editingAccount, onClose, onSaved }: 
                             loading={isSubmitting}
                             disabled={isSubmitting}
                         />
-                    </ScrollView>
+                    </FormScrollView>
                 </Animated.View>
             </KeyboardAvoidingView>
-        </Modal>
+        </AppModal>
     );
 }

@@ -1,22 +1,22 @@
 import { EmptyState, ScreenHeader, ThemedText } from '@/components/common';
 import { useThemeColors } from '@/hooks/use-theme-colors';
+import { formatPeriodRange } from '@/features/household/hooks/use-household';
 import { useUser } from '@/features/user/context/user-context';
 import { isDbReady } from '@/lib/db/db-client';
 import {
     deleteHouseholdHistoryEntry,
     listHouseholdHistory,
-    type HouseholdPeriodHistory,
+    type HouseholdHistoryEntry as HouseholdPeriodHistory,
 } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { UserService } from '@/features/user/services/user-service';
 import { Ionicons } from '@expo/vector-icons';
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, ListRenderItem, Pressable, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import React, { memo, useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, ListRenderItem, Pressable, View } from 'react-native';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const PERIOD_LABELS: Record<string, string> = {
     monthly: 'Monthly',
@@ -32,11 +32,7 @@ const FILTERS: { key: HistoryFilter; label: string }[] = [
     { key: 'yearly', label: 'Yearly' },
 ];
 
-function formatRange(startISO: string, endISO: string): string {
-    const [, sm, sd] = startISO.split('-').map(Number);
-    const [ey, em, ed] = endISO.split('-').map(Number);
-    return `${MONTH_NAMES[sm - 1]} ${sd} – ${MONTH_NAMES[em - 1]} ${ed}, ${ey}`;
-}
+const formatRange = formatPeriodRange;
 
 const keyExtractor = (entry: HouseholdPeriodHistory) => String(entry.id);
 
@@ -57,7 +53,10 @@ const HistoryRow = memo(function HistoryRow({
         : 0;
 
     return (
-        <View
+        <Pressable
+            onPress={() => router.push({ pathname: '/household-period', params: { id: String(entry.id) } })}
+            accessibilityRole="button"
+            accessibilityLabel={`${formatRange(entry.start_date, entry.end_date)}: open this period's expenses`}
             className="rounded-xl p-4 mb-3"
             style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.divider }}
         >
@@ -74,10 +73,13 @@ const HistoryRow = memo(function HistoryRow({
                 <Pressable
                     onPress={() => onDelete(entry)}
                     hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete this period from history"
                     className="w-8 h-8 items-center justify-center rounded-lg"
                 >
                     <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
                 </Pressable>
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </View>
 
             <View className="flex-row items-center justify-between mt-1">
@@ -136,7 +138,7 @@ const HistoryRow = memo(function HistoryRow({
                     </ThemedText>
                 </View>
             )}
-        </View>
+        </Pressable>
     );
 });
 
@@ -169,19 +171,34 @@ export default function HouseholdHistoryScreen() {
         }
     }, []);
 
-    useEffect(() => {
-        load();
-    }, [load]);
+    // Also on return from a month's detail screen, where its income can change.
+    useFocusEffect(useCallback(() => { load(); }, [load]));
 
-    const handleDelete = useCallback(async (entry: HouseholdPeriodHistory) => {
-        try {
-            await deleteHouseholdHistoryEntry(entry.id);
-            toast.success('History entry removed');
-            load();
-        } catch (e) {
-            logger.error('HouseholdHistoryScreen: delete failed', e);
-            toast.error('Failed to delete entry');
-        }
+    const handleDelete = useCallback((entry: HouseholdPeriodHistory) => {
+        const expenses = entry.entries_kept && entry.expense_count > 0
+            ? ` Its ${entry.expense_count} ${entry.expense_count === 1 ? 'expense' : 'expenses'} will be deleted too.`
+            : '';
+        Alert.alert(
+            'Delete from History?',
+            `${formatRange(entry.start_date, entry.end_date)} will be removed.${expenses}`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteHouseholdHistoryEntry(entry.id);
+                            toast.success('History entry removed');
+                            load();
+                        } catch (e) {
+                            logger.error('HouseholdHistoryScreen: delete failed', e);
+                            toast.error('Failed to delete entry');
+                        }
+                    },
+                },
+            ],
+        );
     }, [load]);
 
     const renderRow = useCallback<ListRenderItem<HouseholdPeriodHistory>>(({ item }) => (
@@ -197,7 +214,7 @@ export default function HouseholdHistoryScreen() {
 
             {/* Header stays put; only the content below it scrolls */}
             <View style={{ paddingTop: insets.top }}>
-                <ScreenHeader title="Household History" subtitle="Past budget periods" />
+                <ScreenHeader title="Household History" subtitle="Every past month, with its own income and expenses" />
             </View>
             {/* Single scroller: filter chips are the list header, periods are virtualized rows */}
             <FlatList
@@ -260,7 +277,7 @@ export default function HouseholdHistoryScreen() {
                             <EmptyState
                                 icon="time-outline"
                                 title="No History Yet"
-                                subtitle={`Past periods will appear here\nonce a cycle ends.`}
+                                subtitle={`Each month is saved here when it ends,\nwith its own income and expenses.`}
                                 iconColor={colors.primary}
                             />
                         ) : (

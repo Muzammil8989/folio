@@ -1,9 +1,8 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AmountInput, BottomSheet, BottomSheetRef, SheetHeader, ThemedText } from '@/components/common';
+import { AmountInput, BottomSheet, BottomSheetRef, FormScrollView, SheetHeader, ThemedText } from '@/components/common';
 import { CalendarPicker, toLocalDateStr } from '@/components/common/calendar-picker';
 import { useThemeColors } from '@/hooks/use-theme-colors';
-import { HouseholdConfig } from '@/lib/db/queries';
-import { upsertHouseholdConfig } from '@/lib/db/queries';
+import { HouseholdConfig, HouseholdPeriodOverlapError, upsertHouseholdConfig } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES } from '@/features/user/services/user-service';
@@ -13,7 +12,6 @@ import {
     ActivityIndicator,
     Keyboard,
     Pressable,
-    ScrollView,
     TextInput,
     View,
 } from 'react-native';
@@ -21,6 +19,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Period = 'monthly' | 'weekly' | 'yearly';
 const PERIODS: Period[] = ['monthly', 'weekly', 'yearly'];
+const PERIOD_NOUN: Record<Period, string> = { monthly: 'month', weekly: 'week', yearly: 'year' };
+
+function formatDay(iso: string) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 interface IncomeSetupModalProps {
     visible: boolean;
@@ -87,6 +91,11 @@ export function IncomeSetupModal({ visible, onClose, onSuccess, existingConfig, 
             handleClose();
             onSuccess();
         } catch (e) {
+            if (e instanceof HouseholdPeriodOverlapError) {
+                // Starting earlier would pull a month that is already in History back in.
+                toast.error(`Start date must be after ${formatDay(e.lastArchivedEnd)}: earlier months are already in History.`);
+                return;
+            }
             logger.error('IncomeSetupModal: failed to save', e);
             toast.error('Failed to save household income');
         } finally {
@@ -94,10 +103,8 @@ export function IncomeSetupModal({ visible, onClose, onSuccess, existingConfig, 
         }
     };
 
-    const formattedStartDate = (() => {
-        const [y, m, d] = periodStartDate.split('-').map(Number);
-        return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    })();
+    const formattedStartDate = formatDay(periodStartDate);
+    const periodNoun = PERIOD_NOUN[period];
 
     if (showCalendar) {
         return (
@@ -124,9 +131,12 @@ export function IncomeSetupModal({ visible, onClose, onSuccess, existingConfig, 
             paddingBottom={insets.bottom + 32}
             keyboardAvoiding
         >
-            <SheetHeader title={existingConfig ? 'Edit Household Income' : 'Set Up Household Income'} onClose={handleClose} />
+            <SheetHeader
+                title={existingConfig ? `This ${periodNoun}'s income` : 'Set Up Household Income'}
+                onClose={handleClose}
+            />
 
-            <ScrollView
+            <FormScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 24 }}
@@ -137,6 +147,9 @@ export function IncomeSetupModal({ visible, onClose, onSuccess, existingConfig, 
                     onChange={setAmount}
                     currencySymbol={currencySymbol}
                 />
+                <ThemedText className="text-xs mb-6 -mt-2 text-textMuted dark:text-dark-textMuted">
+                    {`Applies to this ${periodNoun} only. Each ${periodNoun} keeps its own income and expenses in History.`}
+                </ThemedText>
 
                 {/* Period */}
                 <View className="mb-6">
@@ -197,7 +210,7 @@ export function IncomeSetupModal({ visible, onClose, onSuccess, existingConfig, 
                         </ThemedText>
                     }
                 </Pressable>
-            </ScrollView>
+            </FormScrollView>
         </BottomSheet>
     );
 }

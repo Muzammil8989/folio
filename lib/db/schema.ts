@@ -263,6 +263,9 @@ export const householdConfig = sqliteTable('household_config', {
   // Original day-of-month the cycle anchors to (1–31). Lets monthly/yearly cycles
   // recover the intended day after a short month clamps it (e.g. 31 → Feb 28 → Mar 31).
   anchor_day: integer('anchor_day').notNull().default(1),
+  // False when a new month has just started and its income is still last
+  // month's amount carried over; the user is asked to confirm or change it.
+  income_confirmed: integer('income_confirmed', { mode: 'boolean' }).notNull().default(true),
   created_at: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updated_at: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -285,6 +288,7 @@ export const householdExpenses = sqliteTable(
   },
   (table) => [
     index('idx_household_expenses_date').on(table.date),
+    index('idx_household_expenses_date_amount').on(table.date, table.amount),
     index('idx_household_expenses_category_id').on(table.category_id),
     index('idx_household_expenses_linked_transaction_id').on(table.linked_transaction_id),
     check('check_household_expense_amount_positive', sql`amount > 0`),
@@ -307,6 +311,9 @@ export const householdPeriodsHistory = sqliteTable(
     spent_amount: real('spent_amount').notNull().default(0),
     remaining_amount: real('remaining_amount').notNull().default(0),
     expense_count: integer('expense_count').notNull().default(0),
+    // 1 for months closed after DB v12: their expenses are kept, so totals are
+    // computed live. 0 for older months, whose expenses were deleted at close.
+    entries_kept: integer('entries_kept', { mode: 'boolean' }).notNull().default(false),
     created_at: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [

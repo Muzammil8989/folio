@@ -8,6 +8,7 @@ function cfg(period: 'monthly' | 'weekly' | 'yearly', start: string, anchorDay?:
         period,
         period_start_date: start,
         anchor_day: anchorDay ?? parseInt(start.slice(8, 10), 10),
+        income_confirmed: true,
         created_at: '2026-01-01T00:00:00.000Z',
         updated_at: '2026-01-01T00:00:00.000Z',
     };

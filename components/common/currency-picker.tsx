@@ -7,21 +7,22 @@ import { spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { Keyboard, Modal, ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
+import { Keyboard, ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
 import { Pressable } from './pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, {
   Easing,
   FadeIn,
   FadeOut,
   runOnJS,
-  useAnimatedKeyboard,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { FlagIcon } from './flag-icon';
 import { ThemedText } from './themed-text';
+import { AppModal } from './app-modal';
 
 interface CurrencyPickerProps {
   value: string;
@@ -54,9 +55,10 @@ export function CurrencyPicker({ value, onSelect, variant = 'card' }: CurrencyPi
   const backdropOpacity = useSharedValue(0);
   // Lift the sheet above the keyboard while the search field is focused, and shrink it
   // so the header + search field never get pushed above the top of the screen.
-  const keyboard = useAnimatedKeyboard();
+  // Keyboard height from react-native-keyboard-controller (see BottomSheet).
+  const keyboard = useReanimatedKeyboardAnimation();
   const sheetStyle = useAnimatedStyle(() => {
-    const keyboardLift = keyboard.height.value;
+    const keyboardLift = -keyboard.height.value;
     return {
       transform: [{ translateY: sheetY.value - keyboardLift }],
       maxHeight: Math.min(windowHeight * 0.88, windowHeight - keyboardLift - topInset),
@@ -148,7 +150,7 @@ export function CurrencyPicker({ value, onSelect, variant = 'card' }: CurrencyPi
         </Pressable>
       </Animated.View>
 
-      <Modal visible={isVisible} animationType="none" transparent onRequestClose={closeModal}>
+      <AppModal visible={isVisible} animationType="none" transparent onRequestClose={closeModal}>
         <Animated.View style={[{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' }, backdropStyle]}>
           <Pressable style={{ flex: 1 }} onPress={closeModal} />
           <Animated.View
@@ -346,7 +348,7 @@ export function CurrencyPicker({ value, onSelect, variant = 'card' }: CurrencyPi
             </ScrollView>
           </Animated.View>
         </Animated.View>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

@@ -1,9 +1,9 @@
-import { AppButton, ThemedText } from '@/components/common';
+import { AppButton, AppModal, ThemedText } from '@/components/common';
 import { MAX_CONTENT_WIDTH } from '@/hooks/use-content-width';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeInUp, FadeOutDown } from 'react-native-reanimated';
 
@@ -19,7 +19,7 @@ export function DeleteSheet({ name, onCancel, onConfirm, isDeleting }: DeleteShe
     const insets = useSafeAreaInsets();
 
     return (
-        <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
+        <AppModal visible animationType="fade" transparent onRequestClose={onCancel}>
             <View className="flex-1 justify-end bg-black/50">
                 <Animated.View
                     entering={FadeInUp.duration(300).easing(Easing.out(Easing.cubic))}
@@ -62,6 +62,6 @@ export function DeleteSheet({ name, onCancel, onConfirm, isDeleting }: DeleteShe
                     </View>
                 </Animated.View>
             </View>
-        </Modal>
+        </AppModal>
     );
 }

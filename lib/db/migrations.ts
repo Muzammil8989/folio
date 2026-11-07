@@ -7,7 +7,7 @@ import { logger } from '../logger';
  * Supports incremental schema evolution while maintaining data integrity
  */
 
-export const DATABASE_VERSION = 11; // Increment this when adding new migrations
+export const DATABASE_VERSION = 12; // Increment this when adding new migrations
 
 /**
  * Thrown when the schema can't be brought to DATABASE_VERSION. The database
@@ -409,6 +409,35 @@ const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_household_expenses_linked_transaction_id ON household_expenses(linked_transaction_id);
         CREATE INDEX IF NOT EXISTS idx_recurring_category_id ON recurring_expenses(category_id);
       `);
+    },
+  },
+  {
+    version: 12,
+    description: "Household: keep every month's expenses in history and give each month its own income",
+    up: async (db: SQLite.SQLiteDatabase) => {
+      // Months closed from now on keep their expenses, so their totals are
+      // computed live. Months closed earlier had their expenses deleted and
+      // keep showing the totals stored when they closed (entries_kept = 0).
+      const historyCols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(household_periods_history)`);
+      if (!historyCols.some(col => col.name === 'entries_kept')) {
+        await db.execAsync(
+          `ALTER TABLE household_periods_history ADD COLUMN entries_kept INTEGER NOT NULL DEFAULT 0;`
+        );
+      }
+
+      // Whether the user has set the current month's income. A new month
+      // starts with last month's amount as a suggestion, not yet confirmed.
+      const configCols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(household_config)`);
+      if (!configCols.some(col => col.name === 'income_confirmed')) {
+        await db.execAsync(
+          `ALTER TABLE household_config ADD COLUMN income_confirmed INTEGER NOT NULL DEFAULT 1;`
+        );
+      }
+
+      // Totals for a month are summed over its date range.
+      await db.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_household_expenses_date_amount ON household_expenses(date, amount);`
+      );
     },
   },
 ];

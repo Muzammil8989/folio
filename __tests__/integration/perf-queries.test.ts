@@ -55,7 +55,6 @@ function plan(sql: string): string {
 describe('migration v11', () => {
   it('creates every new index', () => {
     expect(db.raw.pragma('user_version', { simple: true })).toBe(DATABASE_VERSION);
-    expect(DATABASE_VERSION).toBe(11);
     expect(indexNames()).toEqual(expect.arrayContaining([
       'idx_transactions_category_type_date_amount',
       'idx_transactions_type_date_amount',
@@ -224,7 +223,7 @@ describe('getAccountsWithBalance (single grouped scan)', () => {
 });
 
 describe('rollOverHouseholdPeriod', () => {
-  it('archives SQL totals, clears the cycle and advances the config in one go', async () => {
+  it("archives SQL totals and advances the config in one go, keeping the month's expenses", async () => {
     await q.upsertHouseholdConfig({ income_amount: 1000, period: 'monthly', period_start_date: '2026-06-18' } as any);
     await q.createHouseholdExpense({ amount: 300, date: '2026-06-25' } as any);
     await q.createHouseholdExpense({ amount: 200, date: '2026-07-10' } as any);
@@ -237,11 +236,14 @@ describe('rollOverHouseholdPeriod', () => {
     const [entry] = await q.listHouseholdHistory();
     expect(entry).toMatchObject({
       start_date: '2026-06-18', end_date: '2026-07-17', income_amount: 1000,
-      spent_amount: 500, remaining_amount: 500, expense_count: 2,
+      spent_amount: 500, remaining_amount: 500, expense_count: 2, entries_kept: true,
     });
-    expect((await q.getHouseholdExpenses('2026-06-18', '2026-07-17'))).toHaveLength(0);
+    // The closed month keeps its own expenses; the new month starts empty.
+    expect((await q.getHouseholdExpenses('2026-06-18', '2026-07-17'))).toHaveLength(2);
     expect((await q.getHouseholdExpenses('2026-07-18', '2026-08-17'))).toHaveLength(1);
-    expect((await q.getHouseholdConfig())!.period_start_date).toBe('2026-07-18');
+    const config = (await q.getHouseholdConfig())!;
+    expect(config.period_start_date).toBe('2026-07-18');
+    expect(config.income_confirmed).toBe(false);
   });
 });
 

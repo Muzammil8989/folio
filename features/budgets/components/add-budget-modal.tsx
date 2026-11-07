@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { AmountInput, AppButton, BottomSheet, BottomSheetRef, SegmentedControl, SheetHeader, ThemedText } from '@/components/common';
+import { AmountInput, AppButton, BottomSheet, BottomSheetRef, FormScrollView, SegmentedControl, SheetHeader, ThemedText } from '@/components/common';
 import { CategoryChips } from '@/features/transactions/components/category-chips';
 import { useUser } from '@/features/user/context/user-context';
 import { BudgetWithSpend } from '../hooks/use-budgets';
@@ -11,7 +11,7 @@ import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES } from '@/features/user/services/user-service';
 import React, { useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
-import { Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PERIODS = ['daily', 'weekly', 'monthly', 'yearly'] as const;
@@ -133,7 +133,7 @@ export function AddBudgetModal({ visible, onClose, onSuccess, editBudget }: AddB
                 onClose={handleClose}
             />
 
-            <ScrollView
+            <FormScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 24 }}
@@ -186,7 +186,7 @@ export function AddBudgetModal({ visible, onClose, onSuccess, editBudget }: AddB
                         </Pressable>
                     </View>
                 )}
-            </ScrollView>
+            </FormScrollView>
         </BottomSheet>
     );
 }
