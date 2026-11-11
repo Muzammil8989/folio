@@ -12,6 +12,7 @@
  * on the same day, the typed price wins.
  */
 import type { AssetType, InvestmentHolding, InvestmentPrice, InvestmentTrade } from '@/lib/db/schema';
+import { deviceDecimalMark, parseAmount } from '@/lib/utils/currency';
 import { parseLocalDate, toISODateString } from '@/lib/utils/date';
 import type { ComponentProps } from 'react';
 import type { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,18 @@ export type HoldingLike = Pick<
     InvestmentHolding,
     'id' | 'name' | 'symbol' | 'asset_type' | 'current_price' | 'price_updated_at' | 'is_archived' | 'color'
 >;
+
+/** Decimal places kept for quantities (fractional coins) and per-unit prices. */
+export const QTY_DECIMALS = 8;
+export const PRICE_DECIMALS = 6;
+
+/**
+ * Read a number typed into a portfolio form, using the phone's decimal mark,
+ * so "1,125" is 1.125 where decimals are written with a comma. NaN if invalid.
+ */
+export function parseFormNumber(input: string, decimals: number = 2): number {
+    return parseAmount(input, decimals, deviceDecimalMark());
+}
 
 /** Below this, a quantity counts as zero (float dust from partial sells). */
 const EPS = 1e-9;

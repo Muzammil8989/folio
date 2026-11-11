@@ -23,7 +23,7 @@ import {
 } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
-import { getCurrencySymbol, parseAmount } from '@/lib/utils/currency';
+import { getCurrencySymbol } from '@/lib/utils/currency';
 import { todayString } from '@/lib/utils/date';
 import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -34,6 +34,9 @@ import {
     formatQuantity,
     formatSigned,
     NEW_TRADE_ID,
+    parseFormNumber,
+    PRICE_DECIMALS,
+    QTY_DECIMALS,
     toInputNumber,
     unitLabel,
     validateTradeChange,
@@ -41,7 +44,6 @@ import {
     type TradeType,
 } from '../utils';
 import { DateRow, Field, formatDay } from './form-parts';
-import { PRICE_DECIMALS, QTY_DECIMALS } from './holding-form-sheet';
 
 const TYPE_OPTIONS: readonly SegmentOption<TradeType>[] = [
     { key: 'buy', label: 'Buy' },
@@ -109,9 +111,9 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
     const others = useMemo(() => trades.filter(t => t.id !== editing?.id), [trades, editing]);
     const heldOnDate = useMemo(() => computePosition(others.filter(t => t.date <= date)), [others, date]);
 
-    const qty = parseAmount(quantity, QTY_DECIMALS);
-    const unitPrice = parseAmount(price, PRICE_DECIMALS);
-    const feeValue = fees.trim() ? parseAmount(fees) : 0;
+    const qty = parseFormNumber(quantity, QTY_DECIMALS);
+    const unitPrice = parseFormNumber(price, PRICE_DECIMALS);
+    const feeValue = fees.trim() ? parseFormNumber(fees) : 0;
     const gross = qty > 0 && unitPrice >= 0 ? qty * unitPrice : null;
     const isEditing = !!editing;
 
@@ -132,7 +134,7 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
         const next: Errors = {};
         let input: TradeInput;
         if (type === 'dividend') {
-            const value = parseAmount(amount);
+            const value = parseFormNumber(amount);
             if (!(value > 0)) next.amount = 'Enter the amount you received';
             input = { type, date, quantity: null, price: null, fees: 0, amount: value, notes };
         } else {
@@ -251,6 +253,7 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
                                     suffix={unit(qty || 2)}
                                     numeric
                                     error={errors.quantity}
+                                    hint={quantity.includes(',') && qty > 0 ? `Read as ${formatQuantity(qty)}` : undefined}
                                 />
                             </View>
                             <View className="flex-1">

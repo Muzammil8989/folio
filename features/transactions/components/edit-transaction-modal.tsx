@@ -60,7 +60,7 @@ export function EditTransactionModal({ visible, transaction, onClose, onSuccess 
             setDuplicateWarning(null);
             refreshCategories();
         }
-    }, [visible, transaction]);
+    }, [visible, transaction, refreshCategories]);
 
     // Duplicate recurring check
     useEffect(() => {

@@ -1654,7 +1654,7 @@ export interface LoanWithDetails {
   accountName: string;
   accountIcon: string | null;
   accountColor: string | null;
-  payments: Array<{ id: number; amount: number; date: string; notes: string | null; created_at: string }>;
+  payments: { id: number; amount: number; date: string; notes: string | null; created_at: string }[];
   settled_amount: number;
   remaining_amount: number;
 }

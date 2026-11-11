@@ -14,13 +14,13 @@ import { createHolding, updateHolding, type InvestmentHolding } from '@/lib/db/q
 import type { AssetType } from '@/lib/db/schema';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
-import { getCurrencySymbol, parseAmount } from '@/lib/utils/currency';
+import { getCurrencySymbol } from '@/lib/utils/currency';
 import { todayString } from '@/lib/utils/date';
 import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { unitLabel } from '../utils';
+import { formatQuantity, parseFormNumber, PRICE_DECIMALS, QTY_DECIMALS, unitLabel } from '../utils';
 import { AssetTypeChips, DateRow, Field } from './form-parts';
 
 interface HoldingFormSheetProps {
@@ -33,9 +33,6 @@ interface HoldingFormSheetProps {
 
 type Errors = Partial<Record<'name' | 'quantity' | 'price' | 'fees' | 'current' | 'date', string>>;
 
-/** Decimal places kept for quantities (fractional coins) and per-unit prices. */
-export const QTY_DECIMALS = 8;
-export const PRICE_DECIMALS = 6;
 
 /**
  * Add a holding (with an optional first purchase and current price), or edit
@@ -82,9 +79,9 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
         setErrors({});
     }, [visible, editing]);
 
-    const qty = parseAmount(quantity, QTY_DECIMALS);
-    const unitPrice = parseAmount(price, PRICE_DECIMALS);
-    const feeValue = fees.trim() ? parseAmount(fees) : 0;
+    const qty = parseFormNumber(quantity, QTY_DECIMALS);
+    const unitPrice = parseFormNumber(price, PRICE_DECIMALS);
+    const feeValue = fees.trim() ? parseFormNumber(fees) : 0;
     const total = qty > 0 && unitPrice >= 0 && feeValue >= 0 ? qty * unitPrice + feeValue : null;
 
     const close = () => {
@@ -104,7 +101,7 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
             if (!(feeValue >= 0)) next.fees = 'Enter fees as a number, or leave it empty';
             if (date > todayString()) next.date = "The date can't be in the future";
         }
-        const currentPrice = current.trim() ? parseAmount(current, PRICE_DECIMALS) : null;
+        const currentPrice = current.trim() ? parseFormNumber(current, PRICE_DECIMALS) : null;
         if (!isEditing && current.trim() && !(currentPrice! >= 0)) next.current = 'Enter a price, or leave it empty';
 
         setErrors(next);
@@ -229,6 +226,7 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
                                     suffix={units}
                                     numeric
                                     error={errors.quantity}
+                                    hint={quantity.includes(',') && qty > 0 ? `Read as ${formatQuantity(qty)}` : undefined}
                                 />
                             </View>
                             <View className="flex-1">

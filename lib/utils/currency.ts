@@ -59,8 +59,15 @@ const GROUPED: Record<',' | '.', RegExp> = {
  * Returns NaN for anything that isn't a number. A leading minus is allowed
  * (e.g. a credit card's opening balance); amount forms reject values <= 0.
  * `decimals` sets the rounding: 2 for money, more for share quantities.
+ * `decimalMark` is the device's decimal mark (see deviceDecimalMark): when
+ * given, a lone mark of that kind is always the decimal point, so "1,125"
+ * reads as 1.125 on a phone that writes decimals with a comma.
  */
-export function parseAmount(input: string | null | undefined, decimals = 2): number {
+export function parseAmount(
+    input: string | null | undefined,
+    decimals = 2,
+    decimalMark?: '.' | ',',
+): number {
     const s = (input ?? '').replace(/\s/g, '');
     const m = s.match(/^(-?)([\d.,]+)$/);
     if (!m || !/\d/.test(m[2])) return NaN;
@@ -88,7 +95,8 @@ export function parseAmount(input: string | null | undefined, decimals = 2): num
         // Exception: with extra precision (share quantities, prices) "0,125"
         // can only be a decimal, as no grouped number starts with 0.
         const leadingZeroDecimal = decimals > 2 && count === 1 && /^0[.,]/.test(body);
-        if (!leadingZeroDecimal && GROUPED[mark].test(body) && (mark === ',' || count > 1)) {
+        const deviceDecimal = count === 1 && mark === decimalMark;
+        if (!leadingZeroDecimal && !deviceDecimal && GROUPED[mark].test(body) && (mark === ',' || count > 1)) {
             intPart = body.split(mark).join('');
         } else if (count === 1) {
             [intPart, fracPart] = body.split(mark);
@@ -101,6 +109,15 @@ export function parseAmount(input: string | null | undefined, decimals = 2): num
     const value = Number(`${intPart || '0'}.${fracPart || '0'}`);
     const scale = Math.pow(10, decimals);
     return (sign * Math.round(value * scale)) / scale;
+}
+
+/** The decimal mark this device writes numbers with: "," in much of Europe, "." elsewhere. */
+export function deviceDecimalMark(): '.' | ',' {
+    try {
+        return (1.5).toLocaleString().includes(',') ? ',' : '.';
+    } catch {
+        return '.';
+    }
 }
 
 /** Format a raw number string with locale commas (e.g., "1234.56" → "1,234.56") */

@@ -4,8 +4,7 @@ import { CalendarPicker, toLocalDateStr } from '@/components/common/calendar-pic
 import { CategoryChips } from '@/features/transactions/components/category-chips';
 import { useCategories } from '@/features/categories/hooks/use-categories';
 import { useThemeColors } from '@/hooks/use-theme-colors';
-import { HouseholdExpenseWithCategory } from '@/lib/db/queries';
-import { createHouseholdExpense, updateHouseholdExpense } from '@/lib/db/queries';
+import { createHouseholdExpense, updateHouseholdExpense, type HouseholdExpenseWithCategory } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES } from '@/features/user/services/user-service';
@@ -71,7 +70,7 @@ export function AddExpenseModal({ visible, onClose, onSuccess, editingExpense, c
                 setNotes('');
             }
         }
-    }, [visible, editingExpense]);
+    }, [visible, editingExpense, refreshCategories]);
 
     const handleClose = () => {
         amountInputRef.current?.blur();

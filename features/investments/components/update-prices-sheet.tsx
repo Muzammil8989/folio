@@ -13,15 +13,14 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import { setHoldingPrices } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
-import { getCurrencySymbol, parseAmount } from '@/lib/utils/currency';
+import { getCurrencySymbol } from '@/lib/utils/currency';
 import { todayString } from '@/lib/utils/date';
 import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatPrice, type HoldingSummary } from '../utils';
+import { formatPrice, parseFormNumber, PRICE_DECIMALS, type HoldingSummary } from '../utils';
 import { DateRow, Field, formatShortDay } from './form-parts';
-import { PRICE_DECIMALS } from './holding-form-sheet';
 
 interface UpdatePricesSheetProps {
     visible: boolean;
@@ -72,7 +71,7 @@ export function UpdatePricesSheet({ visible, onClose, holdings }: UpdatePricesSh
         const nextErrors: Record<number, string> = {};
         const entries: { holdingId: number; price: number }[] = [];
         for (const s of filled) {
-            const price = parseAmount(values[s.holding.id], PRICE_DECIMALS);
+            const price = parseFormNumber(values[s.holding.id], PRICE_DECIMALS);
             if (!(price >= 0)) nextErrors[s.holding.id] = 'Enter a price';
             else entries.push({ holdingId: s.holding.id, price });
         }

@@ -1,5 +1,5 @@
 import { parseAmount } from '@/lib/utils/currency';
-import { BottomSheet, BottomSheetRef, FormScrollView, SheetHeader, ThemedText } from '@/components/common';
+import { BottomSheet, BottomSheetRef, FormScrollView, ThemedText } from '@/components/common';
 import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { createHouseholdTransfer, getCategories } from '@/lib/db/queries';
@@ -46,7 +46,7 @@ export function TransferModal({ visible, onClose, onSuccess, remaining, currency
             setAmount(remaining > 0 ? (Math.round(remaining * 100) / 100).toFixed(2) : '');
             setSelectedAccountId(null);
         }
-    }, [visible, remaining]);
+    }, [visible, remaining, refreshAccounts]);
 
     const handleClose = () => {
         Keyboard.dismiss();

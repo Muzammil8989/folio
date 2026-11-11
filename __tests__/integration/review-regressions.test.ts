@@ -58,6 +58,17 @@ describe('number input edge cases', () => {
         expect(parseAmount('0,125')).toBe(125); // money (2 decimals): existing behaviour unchanged
     });
 
+    it("follows the phone's decimal mark when it's given", () => {
+        // A phone that writes 1,5 for one and a half
+        expect(parseAmount('1,125', 8, ',')).toBe(1.125);
+        expect(parseAmount('1,250', 2, ',')).toBe(1.25);
+        expect(parseAmount('1,234,567', 8, ',')).toBe(1234567); // two commas: still grouping
+        expect(parseAmount('1.234,5', 8, ',')).toBe(1234.5);
+        // A phone that writes 1.5
+        expect(parseAmount('1,125', 8, '.')).toBe(1125);
+        expect(parseAmount('1.125', 8, '.')).toBe(1.125);
+    });
+
     it('turns tiny or long numbers into plain input text', () => {
         expect(toInputNumber(1e-7)).toBe('0.0000001');
         expect(toInputNumber(2.5)).toBe('2.5');
