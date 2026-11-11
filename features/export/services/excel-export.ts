@@ -111,6 +111,40 @@ export function buildWorkbook(data: ReportData): XLSX.WorkBook {
         XLSX.utils.book_append_sheet(wb, ws, 'Budgets');
     }
 
+    // ── Portfolio ──────────────────────────────────────────────
+    if (data.holdings.length) {
+        const n = (v: number): Cell => ({ t: 'n', v });
+        const rows: Cell[][] = data.holdings.map(x => [
+            s(x.name),
+            s(x.symbol),
+            s(x.type),
+            n(x.quantity),
+            m(x.avgCost),
+            x.price == null ? s('—') : m(x.price),
+            m(x.invested),
+            m(x.value),
+            m(x.unrealized),
+            m(x.realized),
+            m(x.dividends),
+            m(x.totalReturn),
+            x.totalReturnPct == null ? s('—') : p(x.totalReturnPct / 100),
+        ]);
+        const last = rows.length + 1;
+        const sumCol = (col: string, v: number): Cell => ({ t: 'n', v, z: money, f: `SUM(${col}2:${col}${last})` });
+        const total = (key: 'invested' | 'value' | 'unrealized' | 'realized' | 'dividends' | 'totalReturn') =>
+            data.holdings.reduce((acc, x) => acc + x[key], 0);
+        const ws = XLSX.utils.aoa_to_sheet([
+            ['Holding', 'Symbol', 'Type', 'Quantity', 'Average cost', 'Price', 'Invested', 'Value', 'Unrealised', 'Realised', 'Dividends', 'Total return', 'Return'].map(h),
+            ...rows,
+            [],
+            [h('Total'), s(''), s(''), s(''), s(''), s(''),
+                sumCol('G', total('invested')), sumCol('H', total('value')), sumCol('I', total('unrealized')),
+                sumCol('J', total('realized')), sumCol('K', total('dividends')), sumCol('L', total('totalReturn'))],
+        ]);
+        ws['!cols'] = [{ wch: 22 }, { wch: 9 }, { wch: 12 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 13 }, { wch: 8 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Portfolio');
+    }
+
     return wb;
 }
 

@@ -381,6 +381,101 @@ export const loanPayments = sqliteTable(
   ]
 );
 
+/**
+ * CALCULATOR_HISTORY TABLE
+ * Finished calculations from the calculator tool (newest 200 are kept).
+ */
+export const calculatorHistory = sqliteTable(
+  'calculator_history',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    expression: text('expression').notNull(),
+    result: real('result').notNull(),
+    created_at: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  }
+);
+
+/**
+ * INVESTMENT_HOLDINGS TABLE
+ * One stock, fund, coin, etc. the user tracks. A separate record: holdings
+ * never move money between accounts. `current_price` is the latest price the
+ * user typed in; trades also carry prices, and the newer of the two is used.
+ */
+export const ASSET_TYPES = ['stock', 'mutual_fund', 'etf', 'crypto', 'gold', 'bond', 'other'] as const;
+export type AssetType = (typeof ASSET_TYPES)[number];
+
+export const investmentHoldings = sqliteTable(
+  'investment_holdings',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    symbol: text('symbol'),
+    asset_type: text('asset_type', { enum: ASSET_TYPES }).notNull().default('stock'),
+    market: text('market'),
+    current_price: real('current_price'),
+    price_updated_at: text('price_updated_at'),
+    color: text('color'),
+    notes: text('notes'),
+    is_archived: integer('is_archived').notNull().default(0),
+    created_at: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    check('check_holding_price_non_negative', sql`current_price IS NULL OR current_price >= 0`),
+  ]
+);
+
+/**
+ * INVESTMENT_TRADES TABLE
+ * Buys and sells (quantity × price + fees) and dividends (amount received).
+ * A buy at price 0 records bonus or gifted shares.
+ */
+export const investmentTrades = sqliteTable(
+  'investment_trades',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    holding_id: integer('holding_id')
+      .notNull()
+      .references(() => investmentHoldings.id, { onDelete: 'cascade' }),
+    type: text('type', { enum: ['buy', 'sell', 'dividend'] }).notNull(),
+    date: text('date').notNull(),
+    quantity: real('quantity'),
+    price: real('price'),
+    fees: real('fees').notNull().default(0),
+    amount: real('amount'),
+    notes: text('notes'),
+    created_at: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index('idx_investment_trades_holding_date').on(table.holding_id, table.date),
+    check(
+      'check_investment_trade_values',
+      sql`fees >= 0 AND ((type IN ('buy', 'sell') AND quantity > 0 AND price >= 0) OR (type = 'dividend' AND amount > 0))`
+    ),
+  ]
+);
+
+/**
+ * INVESTMENT_PRICES TABLE
+ * Prices the user typed in, one per holding per day. Together with trade
+ * prices they draw the value-over-time and price-history charts.
+ */
+export const investmentPrices = sqliteTable(
+  'investment_prices',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    holding_id: integer('holding_id')
+      .notNull()
+      .references(() => investmentHoldings.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    price: real('price').notNull(),
+  },
+  (table) => [
+    unique('uq_investment_prices_holding_date').on(table.holding_id, table.date),
+    check('check_investment_price_non_negative', sql`price >= 0`),
+  ]
+);
+
 // --- RELATIONS ---
 
 /**
@@ -502,3 +597,14 @@ export type NewLoan = typeof loans.$inferInsert;
 
 export type LoanPayment = typeof loanPayments.$inferSelect;
 export type NewLoanPayment = typeof loanPayments.$inferInsert;
+
+export type CalculatorHistoryEntry = typeof calculatorHistory.$inferSelect;
+export type NewCalculatorHistoryEntry = typeof calculatorHistory.$inferInsert;
+
+export type InvestmentHolding = typeof investmentHoldings.$inferSelect;
+export type NewInvestmentHolding = typeof investmentHoldings.$inferInsert;
+
+export type InvestmentTrade = typeof investmentTrades.$inferSelect;
+export type NewInvestmentTrade = typeof investmentTrades.$inferInsert;
+
+export type InvestmentPrice = typeof investmentPrices.$inferSelect;

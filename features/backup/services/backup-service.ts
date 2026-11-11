@@ -14,8 +14,9 @@ const LAST_BACKUP_KEY = 'folio_last_backup_time'; // last SUCCESSFUL backup (man
 const LAST_AUTO_ATTEMPT_KEY = 'folio_last_auto_attempt'; // last auto-backup attempt (success or fail) — prevents retry loops
 const BACKUP_DIR_KEY = 'folio_backup_dir_uri';
 const BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
-// v2 adds loans, loan payments and household tables. v1 files still restore.
-const BACKUP_VERSION = 2;
+// v2 adds loans, loan payments and household tables; v3 adds calculator
+// history and the portfolio. Older files still restore.
+const BACKUP_VERSION = 3;
 
 type Row = Record<string, unknown>;
 
@@ -36,6 +37,10 @@ const BACKUP_TABLES = [
   { key: 'householdPeriodsHistory', table: 'household_periods_history', required: false },
   { key: 'loans', table: 'loans', required: false },
   { key: 'loanPayments', table: 'loan_payments', required: false },
+  { key: 'calculatorHistory', table: 'calculator_history', required: false },
+  { key: 'investmentHoldings', table: 'investment_holdings', required: false },
+  { key: 'investmentTrades', table: 'investment_trades', required: false },
+  { key: 'investmentPrices', table: 'investment_prices', required: false },
 ] as const;
 
 type BackupKey = (typeof BACKUP_TABLES)[number]['key'];

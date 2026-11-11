@@ -105,6 +105,16 @@ export function buildReportHtml(data: ReportData, period?: PeriodFilter): string
         <td class="num ${b.percentUsed > 100 ? 'out' : ''}">${b.percentUsed}%</td>
       </tr>`).join('');
 
+    const holdingRows = data.holdings.map(x => `
+      <tr>
+        <td>${escapeHtml(x.name)}${x.symbol ? `<div class="note">${escapeHtml(x.symbol)} · ${escapeHtml(x.type)}</div>` : `<div class="note">${escapeHtml(x.type)}</div>`}</td>
+        <td class="num">${money(x.invested)}</td>
+        <td class="num">${money(x.value)}</td>
+        <td class="num ${x.totalReturn < 0 ? 'out' : 'in'}">${signed(x.totalReturn)}${x.totalReturnPct == null ? '' : `<div class="note">${x.totalReturnPct > 0 ? '+' : ''}${x.totalReturnPct}%</div>`}</td>
+      </tr>`).join('');
+    const portfolioValue = data.holdings.reduce((acc, x) => acc + x.value, 0);
+    const portfolioReturn = data.holdings.reduce((acc, x) => acc + x.totalReturn, 0);
+
     const generated = new Date(data.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
     return `<!doctype html>
@@ -182,6 +192,16 @@ export function buildReportHtml(data: ReportData, period?: PeriodFilter): string
     <table>
       <thead><tr><th>Category</th><th>Resets</th><th class="num">Spent</th><th class="num">Limit</th><th class="num">Used</th></tr></thead>
       <tbody>${budgetRows}</tbody>
+    </table>
+  </section>` : ''}
+
+  ${data.holdings.length ? `
+  <section>
+    <h2>Portfolio <span class="kicker" style="margin-left:6pt">today, prices as entered</span></h2>
+    <table>
+      <thead><tr><th>Holding</th><th class="num">Invested</th><th class="num">Value</th><th class="num">Total return</th></tr></thead>
+      <tbody>${holdingRows}</tbody>
+      <tfoot><tr><td colspan="2">Portfolio value</td><td class="num">${money(portfolioValue)}</td><td class="num">${signed(portfolioReturn)}</td></tr></tfoot>
     </table>
   </section>` : ''}
 

@@ -241,6 +241,8 @@ function RootLayoutContent() {
       '/household',
       '/household-history',
       '/loans',
+      '/calculator',
+      '/investments',
       '/terms',
       '/privacy',
     ] as const;
@@ -347,6 +349,9 @@ function RootLayoutContent() {
           <Stack.Screen name="household-history" options={opaqueContent} />
           <Stack.Screen name="household-period" options={opaqueContent} />
           <Stack.Screen name="loans" options={opaqueContent} />
+          <Stack.Screen name="calculator" options={opaqueContent} />
+          <Stack.Screen name="investments" options={opaqueContent} />
+          <Stack.Screen name="holding" options={opaqueContent} />
           <Stack.Screen name="terms" options={opaqueContent} />
           <Stack.Screen name="privacy" options={opaqueContent} />
           <Stack.Screen name="+not-found" />

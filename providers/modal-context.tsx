@@ -8,8 +8,8 @@ type TransactionInitialType = 'income' | 'expense';
  * Data domains a mutation can invalidate. Hooks subscribe only to the domains
  * they read, so e.g. editing a budget doesn't refetch every transaction list.
  */
-export type RefreshDomain = 'transactions' | 'accounts' | 'budgets' | 'savings' | 'loans' | 'household' | 'categories';
-const ALL_DOMAINS: readonly RefreshDomain[] = ['transactions', 'accounts', 'budgets', 'savings', 'loans', 'household', 'categories'];
+export type RefreshDomain = 'transactions' | 'accounts' | 'budgets' | 'savings' | 'loans' | 'household' | 'categories' | 'investments';
+const ALL_DOMAINS: readonly RefreshDomain[] = ['transactions', 'accounts', 'budgets', 'savings', 'loans', 'household', 'categories', 'investments'];
 
 export interface OpenModalOptions {
     /** 'transaction' only — which side of the Expense/Income toggle to start on. */

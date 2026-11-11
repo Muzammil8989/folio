@@ -75,7 +75,7 @@ describe('buildReportData', () => {
 
   it('leaves out sections that were switched off', async () => {
     await add('expense', 5, '2026-04-02');
-    const data = await build('2026-04-01', '2026-04-30', { sections: { transactions: false, categories: false, budgets: false } });
+    const data = await build('2026-04-01', '2026-04-30', { sections: { transactions: false, categories: false, budgets: false, investments: false } });
     expect(data.transactions).toEqual([]);
     expect(data.categories).toEqual([]);
     expect(data.budgets).toEqual([]);

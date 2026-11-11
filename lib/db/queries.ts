@@ -20,10 +20,14 @@ import { getDb } from './db-client';
 import {
   accounts,
   budgets,
+  calculatorHistory,
   categories,
   householdConfig,
   householdExpenses,
   householdPeriodsHistory,
+  investmentHoldings,
+  investmentPrices,
+  investmentTrades,
   loanPayments,
   loans,
   recurringExpenses,
@@ -34,6 +38,11 @@ import {
 import type {
   HouseholdExpense,
   HouseholdPeriodHistory,
+  InvestmentHolding,
+  InvestmentPrice,
+  InvestmentTrade,
+  NewInvestmentHolding,
+  NewInvestmentTrade,
   NewAccount,
   NewBudget,
   NewCategory,
@@ -47,7 +56,7 @@ import type {
 } from './schema';
 
 export type {
-  Account, Budget, Category, HouseholdConfig, HouseholdExpense, HouseholdPeriodHistory, Loan, LoanPayment, NewAccount, NewBudget, NewCategory, NewHouseholdConfig, NewHouseholdExpense, NewHouseholdPeriodHistory, NewLoan, NewLoanPayment, NewRecurringExpense, NewSavingsGoal, NewTransaction, RecurringExpense, SavingsGoal, Transaction
+  Account, AssetType, Budget, CalculatorHistoryEntry, Category, InvestmentHolding, InvestmentPrice, InvestmentTrade, HouseholdConfig, HouseholdExpense, HouseholdPeriodHistory, Loan, LoanPayment, NewAccount, NewBudget, NewCategory, NewHouseholdConfig, NewHouseholdExpense, NewHouseholdPeriodHistory, NewLoan, NewLoanPayment, NewRecurringExpense, NewSavingsGoal, NewTransaction, RecurringExpense, SavingsGoal, Transaction
 } from './schema';
 
 /**
@@ -72,6 +81,20 @@ export function isTransferCategory(name: string | null | undefined): boolean {
 /** SQL condition: the transaction is real income/spending, not a transfer. */
 const notTransfer = () =>
   sql`${transactions.category_id} NOT IN (SELECT id FROM categories WHERE name IN ('Loan Given', 'Loan Received', 'Transfer Out', 'Transfer In', 'To Savings', 'From Savings'))`;
+
+/** Optional narrowing for report queries (Insights filters). */
+export interface ReportFilters {
+  accountId?: number | null;
+  categoryId?: number | null;
+}
+
+/** Conditions shared by every report query: no transfers, plus any filters. */
+function reportWhere(filters?: ReportFilters) {
+  const conds = [notTransfer()];
+  if (filters?.accountId != null) conds.push(eq(transactions.account_id, filters.accountId));
+  if (filters?.categoryId != null) conds.push(eq(transactions.category_id, filters.categoryId));
+  return conds;
+}
 
 /**
  * Get current balance across all accounts:
@@ -179,10 +202,11 @@ export async function getTransactionsByDateRange(
  */
 export async function getSummaryByDateRange(
   startDate: string,
-  endDate: string
+  endDate: string,
+  filters?: ReportFilters
 ) {
   const db = getDb();
-  const conditions = [between(transactions.date, startDate, endDate), notTransfer()];
+  const conditions = [between(transactions.date, startDate, endDate), ...reportWhere(filters)];
 
   return db
     .select({
@@ -852,7 +876,18 @@ export interface CategoryExpense {
 /** Expenses grouped by category for a date range */
 export async function getExpenseByCategory(
   startDate: string,
-  endDate: string
+  endDate: string,
+  filters?: ReportFilters
+): Promise<CategoryExpense[]> {
+  return getCategoryTotals('expense', startDate, endDate, filters);
+}
+
+/** Income or spending grouped by category for a date range, largest first. */
+export async function getCategoryTotals(
+  type: 'income' | 'expense',
+  startDate: string,
+  endDate: string,
+  filters?: ReportFilters
 ): Promise<CategoryExpense[]> {
   const db = getDb();
   const rows = await db
@@ -867,9 +902,9 @@ export async function getExpenseByCategory(
     .leftJoin(categories, eq(transactions.category_id, categories.id))
     .where(
       and(
-        eq(transactions.type, 'expense'),
+        eq(transactions.type, type),
         between(transactions.date, startDate, endDate),
-        notTransfer()
+        ...reportWhere(filters)
       )
     )
     .groupBy(categories.id)
@@ -900,16 +935,22 @@ const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
  * the current month (oldest first). Months with no transactions are 0, and
  * future-dated transactions are ignored. Filtering and grouping run in SQL.
  */
-export async function getMonthlyTotals(months = 6, now: Date = new Date()): Promise<MonthlyTotals[]> {
+export async function getMonthlyTotals(
+  months = 6,
+  now: Date = new Date(),
+  filters?: ReportFilters
+): Promise<MonthlyTotals[]> {
   const db = getDb();
   const first = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  // Up to `now`, so scheduled (future-dated) entries later this month are left out too.
+  const monthEnd = toISODateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const last = toISODateString(now) < monthEnd ? toISODateString(now) : monthEnd;
   const monthKey = sql<string>`substr(${transactions.date}, 1, 7)`;
 
   const rows = await db
     .select({ key: monthKey, type: transactions.type, total: sum(transactions.amount) })
     .from(transactions)
-    .where(and(between(transactions.date, toISODateString(first), toISODateString(last)), notTransfer()))
+    .where(and(between(transactions.date, toISODateString(first), last), ...reportWhere(filters)))
     .groupBy(monthKey, transactions.type);
 
   const result: (MonthlyTotals & { key: string })[] = [];
@@ -1009,13 +1050,14 @@ export interface DailySpend {
 export async function getDailySpending(
   startDate: string,
   endDate: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  filters?: ReportFilters
 ): Promise<DailySpend[]> {
   const db = getDb();
   const rows = await db
     .select({ date: transactions.date, total: sum(transactions.amount) })
     .from(transactions)
-    .where(and(eq(transactions.type, 'expense'), between(transactions.date, startDate, endDate), notTransfer()))
+    .where(and(eq(transactions.type, 'expense'), between(transactions.date, startDate, endDate), ...reportWhere(filters)))
     .groupBy(transactions.date);
   const byDate = new Map(rows.map(r => [r.date, Number(r.total) || 0]));
 
@@ -1924,4 +1966,334 @@ export async function getRecurringMonthlyTotal(): Promise<number> {
     const mult = MULTIPLIERS[r.frequency] ?? 1;
     return sum + r.amount * mult;
   }, 0);
+}
+
+/**
+ * CALCULATOR HISTORY
+ */
+
+/** How many finished calculations the calculator keeps. */
+export const CALC_HISTORY_LIMIT = 200;
+
+/** Save a finished calculation, then drop entries beyond the newest CALC_HISTORY_LIMIT. */
+export async function addCalcHistory(expression: string, result: number) {
+  const db = getDb();
+  const [row] = await db
+    .insert(calculatorHistory)
+    .values({ expression, result, created_at: new Date().toISOString() })
+    .returning();
+  const newest = db
+    .select({ id: calculatorHistory.id })
+    .from(calculatorHistory)
+    .orderBy(desc(calculatorHistory.id))
+    .limit(CALC_HISTORY_LIMIT);
+  await db.delete(calculatorHistory).where(notInArray(calculatorHistory.id, newest));
+  return row;
+}
+
+/** Newest first. */
+export async function getCalcHistory(limit = CALC_HISTORY_LIMIT) {
+  const db = getDb();
+  return db.select().from(calculatorHistory).orderBy(desc(calculatorHistory.id)).limit(limit);
+}
+
+export async function deleteCalcHistoryEntry(id: number) {
+  const db = getDb();
+  await db.delete(calculatorHistory).where(eq(calculatorHistory.id, id));
+}
+
+export async function clearCalcHistory() {
+  const db = getDb();
+  await db.delete(calculatorHistory);
+}
+
+/**
+ * PORTFOLIO
+ * A separate record of investments: nothing here touches accounts or
+ * transactions. Positions and gains are computed from the trades
+ * (features/investments/utils.ts), so only raw rows are stored.
+ */
+
+export interface PortfolioData {
+  holdings: InvestmentHolding[];
+  /** Oldest first. */
+  trades: InvestmentTrade[];
+  /** Typed-in prices, oldest first. */
+  prices: InvestmentPrice[];
+}
+
+export type HoldingInput = Pick<NewInvestmentHolding, 'name' | 'symbol' | 'asset_type' | 'market' | 'notes' | 'color'>;
+export type TradeInput = Pick<NewInvestmentTrade, 'type' | 'date' | 'quantity' | 'price' | 'fees' | 'amount' | 'notes'>;
+
+/** Buys and sells keep quantity + price; dividends keep only the amount. */
+function normalizeTrade(input: TradeInput): TradeInput {
+  const fees = input.type === 'dividend' ? 0 : Math.max(0, input.fees ?? 0);
+  return input.type === 'dividend'
+    ? { ...input, quantity: null, price: null, fees, notes: input.notes || null }
+    : { ...input, amount: null, fees, notes: input.notes || null };
+}
+
+function cleanHolding<T extends Partial<HoldingInput>>(input: T): T {
+  const out = { ...input };
+  if (out.name !== undefined) out.name = out.name.trim();
+  if (out.symbol !== undefined) out.symbol = out.symbol?.trim().toUpperCase() || null;
+  if (out.market !== undefined) out.market = out.market?.trim() || null;
+  if (out.notes !== undefined) out.notes = out.notes?.trim() || null;
+  return out;
+}
+
+export async function getPortfolioData(): Promise<PortfolioData> {
+  const db = getDb();
+  const [holdings, trades, prices] = await Promise.all([
+    db.select().from(investmentHoldings).orderBy(asc(investmentHoldings.id)),
+    db.select().from(investmentTrades).orderBy(asc(investmentTrades.date), asc(investmentTrades.id)),
+    db.select().from(investmentPrices).orderBy(asc(investmentPrices.date)),
+  ]);
+  return { holdings, trades, prices };
+}
+
+/** One holding with its trades and typed-in prices, or null if it was deleted. */
+export async function getHoldingData(id: number): Promise<PortfolioData | null> {
+  const db = getDb();
+  const [holdings, trades, prices] = await Promise.all([
+    db.select().from(investmentHoldings).where(eq(investmentHoldings.id, id)),
+    db
+      .select()
+      .from(investmentTrades)
+      .where(eq(investmentTrades.holding_id, id))
+      .orderBy(asc(investmentTrades.date), asc(investmentTrades.id)),
+    db.select().from(investmentPrices).where(eq(investmentPrices.holding_id, id)).orderBy(asc(investmentPrices.date)),
+  ]);
+  if (!holdings.length) return null;
+  return { holdings, trades, prices };
+}
+
+/**
+ * Add a holding, optionally with its first trade and a current price,
+ * all in one transaction.
+ */
+export async function createHolding(
+  input: HoldingInput,
+  firstTrade?: TradeInput | null,
+  currentPrice?: { price: number; date: string } | null
+): Promise<InvestmentHolding> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  return db.transaction((t) => {
+    const [holding] = t
+      .insert(investmentHoldings)
+      .values({
+        ...cleanHolding(input),
+        current_price: currentPrice?.price ?? null,
+        price_updated_at: currentPrice?.date ?? null,
+        created_at: now,
+        updated_at: now,
+      })
+      .returning()
+      .all();
+    if (firstTrade) {
+      t.insert(investmentTrades).values({ ...normalizeTrade(firstTrade), holding_id: holding.id, created_at: now }).run();
+    }
+    if (currentPrice) {
+      t.insert(investmentPrices).values({ holding_id: holding.id, date: currentPrice.date, price: currentPrice.price }).run();
+    }
+    return holding;
+  });
+}
+
+export async function updateHolding(id: number, patch: Partial<HoldingInput> & { is_archived?: number }) {
+  const db = getDb();
+  await db
+    .update(investmentHoldings)
+    .set({ ...cleanHolding(patch), updated_at: new Date().toISOString() })
+    .where(eq(investmentHoldings.id, id));
+}
+
+/** Delete a holding with all its trades and prices. */
+export async function deleteHolding(id: number) {
+  const db = getDb();
+  db.transaction((t) => {
+    t.delete(investmentTrades).where(eq(investmentTrades.holding_id, id)).run();
+    t.delete(investmentPrices).where(eq(investmentPrices.holding_id, id)).run();
+    t.delete(investmentHoldings).where(eq(investmentHoldings.id, id)).run();
+  });
+}
+
+export async function createTrade(holdingId: number, input: TradeInput): Promise<InvestmentTrade> {
+  const db = getDb();
+  const [row] = await db
+    .insert(investmentTrades)
+    .values({ ...normalizeTrade(input), holding_id: holdingId, created_at: new Date().toISOString() })
+    .returning();
+  return row;
+}
+
+export async function updateTrade(id: number, input: TradeInput) {
+  const db = getDb();
+  await db.update(investmentTrades).set(normalizeTrade(input)).where(eq(investmentTrades.id, id));
+}
+
+export async function deleteTrade(id: number) {
+  const db = getDb();
+  await db.delete(investmentTrades).where(eq(investmentTrades.id, id));
+}
+
+/**
+ * Record typed-in prices (one per holding per day; a second entry the same day
+ * replaces the first). A holding's current price only moves forward: a
+ * back-dated price is kept for the charts but doesn't replace a newer one.
+ */
+export async function setHoldingPrices(entries: { holdingId: number; price: number }[], date: string) {
+  if (!entries.length) return;
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.transaction((t) => {
+    for (const { holdingId, price } of entries) {
+      t.insert(investmentPrices)
+        .values({ holding_id: holdingId, date, price })
+        .onConflictDoUpdate({ target: [investmentPrices.holding_id, investmentPrices.date], set: { price } })
+        .run();
+      t.update(investmentHoldings)
+        .set({ current_price: price, price_updated_at: date, updated_at: now })
+        .where(
+          and(
+            eq(investmentHoldings.id, holdingId),
+            sql`(${investmentHoldings.price_updated_at} IS NULL OR ${investmentHoldings.price_updated_at} <= ${date})`
+          )
+        )
+        .run();
+    }
+  });
+}
+
+export async function setHoldingPrice(holdingId: number, price: number, date: string) {
+  await setHoldingPrices([{ holdingId, price }], date);
+}
+
+/**
+ * INSIGHTS
+ */
+
+export interface WeekdaySpend {
+  /** 0 = Sunday … 6 = Saturday. */
+  weekday: number;
+  total: number;
+  /** How many of this weekday fall in the range (up to today). */
+  days: number;
+  /** total ÷ days. */
+  average: number;
+}
+
+/**
+ * Spending per weekday over a range (future-dated entries ignored), with the
+ * average per occurrence so ranges that hold, say, five Saturdays and four
+ * Sundays still compare fairly.
+ */
+export async function getSpendByWeekday(
+  startDate: string,
+  endDate: string,
+  filters?: ReportFilters,
+  now: Date = new Date()
+): Promise<WeekdaySpend[]> {
+  const db = getDb();
+  const today = toISODateString(now);
+  const stop = endDate < today ? endDate : today;
+  const weekday = sql<string>`strftime('%w', ${transactions.date})`;
+  const rows = await db
+    .select({ weekday, total: sum(transactions.amount) })
+    .from(transactions)
+    .where(and(eq(transactions.type, 'expense'), between(transactions.date, startDate, stop), ...reportWhere(filters)))
+    .groupBy(weekday);
+  const totals = new Map(rows.map(r => [Number(r.weekday), Number(r.total) || 0]));
+
+  const days = [0, 0, 0, 0, 0, 0, 0];
+  for (let d = parseLocalDate(startDate); toISODateString(d) <= stop; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    days[d.getDay()]++;
+  }
+  return days.map((count, i) => {
+    const total = totals.get(i) ?? 0;
+    return { weekday: i, total, days: count, average: count ? total / count : 0 };
+  });
+}
+
+export interface TopExpense {
+  id: number;
+  amount: number;
+  date: string;
+  notes: string | null;
+  categoryId: number;
+  categoryName: string | null;
+  categoryIcon: string | null;
+  categoryColor: string | null;
+  accountName: string | null;
+}
+
+/** The largest single expenses in a range (transfers excluded). */
+export async function getTopExpenses(
+  startDate: string,
+  endDate: string,
+  filters?: ReportFilters,
+  limit = 5
+): Promise<TopExpense[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: transactions.id,
+      amount: transactions.amount,
+      date: transactions.date,
+      notes: transactions.notes,
+      categoryId: transactions.category_id,
+      categoryName: categories.name,
+      categoryIcon: categories.icon,
+      categoryColor: categories.color,
+      accountName: accounts.name,
+    })
+    .from(transactions)
+    .leftJoin(categories, eq(transactions.category_id, categories.id))
+    .leftJoin(accounts, eq(transactions.account_id, accounts.id))
+    .where(and(eq(transactions.type, 'expense'), between(transactions.date, startDate, endDate), ...reportWhere(filters)))
+    .orderBy(desc(transactions.amount), desc(transactions.date))
+    .limit(limit);
+  return rows;
+}
+
+export interface NetWorthParts {
+  /** Every account's balance added up (can be negative, e.g. credit cards). */
+  accounts: number;
+  /** Money set aside in savings goals. */
+  savings: number;
+  /** Money lent out that isn't back in an account yet. */
+  lent: number;
+  /** Money borrowed that hasn't left an account yet. */
+  borrowed: number;
+}
+
+/**
+ * Everything net worth needs except the portfolio (valued separately from its
+ * trades). Savings goals and loans already moved money out of or into
+ * accounts, so adding them here doesn't count anything twice.
+ */
+export async function getNetWorthParts(): Promise<NetWorthParts> {
+  const db = getDb();
+  const [accountList, [savingsRow], openLoans] = await Promise.all([
+    getAccountsWithBalance(),
+    db.select({ total: sum(savingsGoals.saved_amount) }).from(savingsGoals),
+    getLoans(),
+  ]);
+  // Repayments are only logged against the loan; the account moves when the
+  // loan is transferred back (transaction_id set). Until then the full amount
+  // is still outside the accounts, repaid or not.
+  let lent = 0;
+  let borrowed = 0;
+  for (const loan of openLoans) {
+    if (loan.transaction_id != null) continue;
+    if (loan.type === 'given') lent += loan.amount;
+    else borrowed += loan.amount;
+  }
+  return {
+    accounts: accountList.reduce((s, a) => s + a.balance, 0),
+    savings: Number(savingsRow?.total) || 0,
+    lent,
+    borrowed,
+  };
 }
