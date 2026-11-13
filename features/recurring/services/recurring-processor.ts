@@ -72,7 +72,10 @@ function hasEnded(recurring: { start_date: string; frequency: Frequency; end_dat
  * each run reads last_processed before writing it, so two concurrent runs
  * would both create the same occurrences.
  */
-type ProcessResult = { success: boolean; created: number; categoryNames?: string[]; error?: unknown };
+/** An expense the processor booked, for budget alerts. */
+export type BookedExpense = { categoryId: number; amount: number; date: string };
+
+type ProcessResult = { success: boolean; created: number; categoryNames?: string[]; bookedExpenses?: BookedExpense[]; error?: unknown };
 let inFlight: Promise<ProcessResult> | null = null;
 
 export function processRecurringTransactions(today: string = todayString()): Promise<ProcessResult> {
@@ -89,6 +92,7 @@ async function runProcessor(today: string): Promise<ProcessResult> {
 
         let createdCount = 0;
         const categoryNames: string[] = [];
+        const bookedExpenses: BookedExpense[] = [];
 
         // Every category the active items use, in one query instead of one per item.
         const categoryIds = [...new Set(active.map(r => r.category_id))];
@@ -167,6 +171,9 @@ async function runProcessor(today: string): Promise<ProcessResult> {
                 if (due.length) {
                     createdCount += due.length;
                     categoryNames.push(category.name || `Bill #${recurring.id}`);
+                    if (category.type === 'expense') {
+                        for (const date of due) bookedExpenses.push({ categoryId: recurring.category_id, amount: recurring.amount, date });
+                    }
                 }
             } catch (error) {
                 logger.error(`Error processing recurring ${recurring.id}:`, error);
@@ -174,7 +181,7 @@ async function runProcessor(today: string): Promise<ProcessResult> {
         }
 
         logger.info(`Processed recurring transactions: ${createdCount} created`);
-        return { success: true, created: createdCount, categoryNames };
+        return { success: true, created: createdCount, categoryNames, bookedExpenses };
     } catch (error) {
         logger.error('Error in processRecurringTransactions:', error);
         return { success: false, created: 0, error };

@@ -5,6 +5,7 @@ import { CategoryChips } from '@/features/transactions/components/category-chips
 import { useCategories } from '@/features/categories/hooks/use-categories';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { createHouseholdExpense, updateHouseholdExpense, type HouseholdExpenseWithCategory } from '@/lib/db/queries';
+import { NotificationService } from '@/features/notifications/services/notification-service';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES } from '@/features/user/services/user-service';
@@ -108,6 +109,9 @@ export function AddExpenseModal({ visible, onClose, onSuccess, editingExpense, c
                 });
                 toast.success('Expense added');
             }
+            // Fire-and-forget: alert when this pushes the period past 80% / 100% of its income.
+            const added = isEditing && editingExpense ? parsed - editingExpense.amount : parsed;
+            NotificationService.checkHouseholdBudgetAlert(added, date).catch(() => {});
             handleClose();
             onSuccess();
         } catch (e) {

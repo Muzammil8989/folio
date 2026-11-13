@@ -80,6 +80,15 @@ describe('processRecurringTransactions (real SQLite)', () => {
     expect(txDates()).toHaveLength(3);
   });
 
+  it('reports each booked expense, for budget alerts', async () => {
+    await newRecurring();
+    const result = await processRecurringTransactions('2026-03-01');
+    expect(result.bookedExpenses).toEqual([
+      { categoryId: expenseCat, amount: 15, date: '2026-01-31' },
+      { categoryId: expenseCat, amount: 15, date: '2026-02-28' },
+    ]);
+  });
+
   it('links generated transactions to the recurring entry', async () => {
     const r = await newRecurring({ start_date: '2026-03-01' });
     await processRecurringTransactions('2026-03-01');

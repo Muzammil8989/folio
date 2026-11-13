@@ -51,7 +51,11 @@ import { ModalProvider, useModalActions } from '@/providers/modal-context';
 import { UserProvider, useUser } from '@/features/user/context/user-context';
 import React, { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
-import { NotificationService } from '@/features/notifications/services/notification-service';
+import {
+  NotificationService,
+  notificationRoute,
+  type NotificationRoute,
+} from '@/features/notifications/services/notification-service';
 import { processRecurringTransactions } from '@/features/recurring/services/recurring-processor';
 
 const PRIMARY_COLOR = lightColors.primary;
@@ -165,6 +169,7 @@ function RootLayoutContent() {
     // Deferred so the native call doesn't compete with the first frames.
     const task = InteractionManager.runAfterInteractions(() => {
       Notifications.cancelScheduledNotificationAsync('wf-daily-reminder').catch(() => {});
+      NotificationService.ensureAndroidChannel().catch(() => {});
     });
     return () => task.cancel();
   }, []);
@@ -203,9 +208,17 @@ function RootLayoutContent() {
     if (isLoading || !profile.isOnboarded) return;
 
     const runRecurring = () => {
-      processRecurringTransactions().then((result) => {
-        if (result.success && result.created > 0) triggerRefresh();
-      });
+      processRecurringTransactions().then(async (result) => {
+        if (result.success && result.created > 0) {
+          triggerRefresh();
+          await NotificationService.sendRecurringAlert(result.created, result.categoryNames ?? []);
+          await NotificationService.checkBudgetAlerts(result.bookedExpenses ?? []);
+        }
+        // Loan due dates and the household period may have moved on while the
+        // app was closed (or a backup was restored): re-plan their reminders.
+        await NotificationService.syncLoanReminders();
+        await NotificationService.scheduleHouseholdPeriodReminder();
+      }).catch((error) => logger.error('Recurring / reminder check failed', error));
     };
 
     const startup = runAfterStartup(runRecurring, 0);
@@ -285,6 +298,31 @@ function RootLayoutContent() {
   }, [mounted, isLoading, profile.isOnboarded]);
 
   const showLock = isSecurityEnabled && isLocked;
+
+  // Tapping a notification opens the screen it is about (loans, budgets,
+  // household…). Held until the app is ready and unlocked, so a tap on a cold
+  // start or while the PIN screen is up still lands in the right place.
+  const [pendingRoute, setPendingRoute] = useState<NotificationRoute | null>(null);
+  useEffect(() => {
+    const open = (response: Notifications.NotificationResponse | null | undefined) => {
+      const route = notificationRoute(response?.notification.request.content.data);
+      if (route) setPendingRoute(route);
+    };
+    Notifications.getLastNotificationResponseAsync?.()
+      .then((response) => {
+        open(response);
+        Notifications.clearLastNotificationResponseAsync?.().catch(() => {});
+      })
+      .catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(open);
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!pendingRoute || !mounted || isLoading || showLock || !profile.isOnboarded) return;
+    router.push(pendingRoute as never);
+    setPendingRoute(null);
+  }, [pendingRoute, mounted, isLoading, showLock, profile.isOnboarded]);
+
   // A sheet or dialog is open over the app (rendered by PortalHost below).
   const overlayOpen = usePortalActive();
 
