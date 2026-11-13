@@ -20,7 +20,7 @@ import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatQuantity, parseFormNumber, PRICE_DECIMALS, QTY_DECIMALS, unitLabel } from '../utils';
+import { formatQuantity, parseFormNumber, PRICE_DECIMALS, priceTerm, QTY_DECIMALS, unitLabel } from '../utils';
 import { AssetTypeChips, DateRow, Field } from './form-parts';
 
 interface HoldingFormSheetProps {
@@ -79,6 +79,9 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
         setErrors({});
     }, [visible, editing]);
 
+    // "NAV" for mutual funds, "price" for everything else (Term starts a label).
+    const Term = priceTerm(type);
+    const term = Term === 'NAV' ? 'NAV' : 'price';
     const qty = parseFormNumber(quantity, QTY_DECIMALS);
     const unitPrice = parseFormNumber(price, PRICE_DECIMALS);
     const feeValue = fees.trim() ? parseFormNumber(fees) : 0;
@@ -97,12 +100,12 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
         const wantsTrade = !isEditing && (quantity.trim() !== '' || price.trim() !== '');
         if (wantsTrade) {
             if (!(qty > 0)) next.quantity = 'Enter how many you bought';
-            if (price.trim() === '' || !(unitPrice >= 0)) next.price = 'Enter the price per unit (0 for bonus shares)';
+            if (price.trim() === '' || !(unitPrice >= 0)) next.price = `Enter the ${term} per unit (0 for bonus units)`;
             if (!(feeValue >= 0)) next.fees = 'Enter fees as a number, or leave it empty';
             if (date > todayString()) next.date = "The date can't be in the future";
         }
         const currentPrice = current.trim() ? parseFormNumber(current, PRICE_DECIMALS) : null;
-        if (!isEditing && current.trim() && !(currentPrice! >= 0)) next.current = 'Enter a price, or leave it empty';
+        if (!isEditing && current.trim() && !(currentPrice! >= 0)) next.current = `Enter the ${term}, or leave it empty`;
 
         setErrors(next);
         if (Object.keys(next).length) return;
@@ -231,7 +234,7 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
                             </View>
                             <View className="flex-1">
                                 <Field
-                                    label="Price per unit"
+                                    label={`${Term} per unit`}
                                     value={price}
                                     onChange={setPrice}
                                     placeholder="0.00"
@@ -262,14 +265,14 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
                         )}
 
                         <Field
-                            label="Current price (optional)"
+                            label={`Current ${term} (optional)`}
                             value={current}
                             onChange={setCurrent}
-                            placeholder="Leave empty to use the purchase price"
+                            placeholder={`Leave empty to use the purchase ${term}`}
                             prefix={symbol}
                             numeric
                             error={errors.current}
-                            hint="Prices are typed in by you. Update them any time from the portfolio."
+                            hint={`Today's ${term} per unit, typed in by you. Update it any time from the portfolio.`}
                         />
                     </>
                 )}

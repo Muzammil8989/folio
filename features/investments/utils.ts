@@ -78,6 +78,14 @@ export function unitLabel(type: AssetType, quantity = 2): string {
     }
 }
 
+/**
+ * What the per-unit price is called: "NAV" (net asset value) for mutual
+ * funds, as fund statements call it; "Price" for everything else.
+ */
+export function priceTerm(type: AssetType): 'NAV' | 'Price' {
+    return type === 'mutual_fund' ? 'NAV' : 'Price';
+}
+
 export const TRADE_LABELS: Record<TradeType, string> = { buy: 'Buy', sell: 'Sell', dividend: 'Dividend' };
 
 // ── Trades and positions ─────────────────────────────────────────────────────
@@ -291,6 +299,8 @@ export interface PortfolioSummary {
     dividends: number;
     totalReturn: number;
     totalReturnPct: number | null;
+    /** Everything ever spent on buys, fees included (the base of totalReturnPct). */
+    totalBought: number;
     /** Holdings with units still held. */
     openCount: number;
 }
@@ -316,6 +326,7 @@ export function summarizePortfolio(summaries: readonly HoldingSummary[]): Portfo
         dividends,
         totalReturn,
         totalReturnPct: totalBought > 0 ? (totalReturn / totalBought) * 100 : null,
+        totalBought,
         openCount,
     };
 }

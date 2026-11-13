@@ -36,6 +36,7 @@ import {
     NEW_TRADE_ID,
     parseFormNumber,
     PRICE_DECIMALS,
+    priceTerm,
     QTY_DECIMALS,
     toInputNumber,
     unitLabel,
@@ -79,6 +80,9 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
     const symbol = getCurrencySymbol(profile.currency);
     const fmt = (n: number) => UserService.formatCurrency(n, profile.currency);
     const unit = (q: number) => unitLabel(holding.asset_type, q);
+    // "NAV" for mutual funds, "price" for everything else (Term starts a label).
+    const Term = priceTerm(holding.asset_type);
+    const term = Term === 'NAV' ? 'NAV' : 'price';
 
     const [type, setType] = useState<TradeType>(initialType);
     const [quantity, setQuantity] = useState('');
@@ -140,7 +144,7 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
         } else {
             if (!(qty > 0)) next.quantity = `Enter how many ${unit(2)}`;
             if (price.trim() === '' || !(unitPrice >= 0)) {
-                next.price = type === 'buy' ? 'Enter the price per unit (0 for bonus shares)' : 'Enter the price per unit';
+                next.price = type === 'buy' ? `Enter the ${term} per unit (0 for bonus units)` : `Enter the ${term} per unit`;
             }
             if (!(feeValue >= 0)) next.fees = 'Enter fees as a number, or leave it empty';
             input = { type, date, quantity: qty, price: unitPrice, fees: feeValue, amount: null, notes };
@@ -258,7 +262,7 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
                             </View>
                             <View className="flex-1">
                                 <Field
-                                    label="Price per unit"
+                                    label={`${Term} per unit`}
                                     value={price}
                                     onChange={setPrice}
                                     placeholder="0.00"
@@ -315,7 +319,7 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
                         </View>
                         {sellResult != null && (
                             <View className="flex-row justify-between items-start mt-1">
-                                <ThemedText type="caption" className="flex-1 mr-3">Profit / loss (vs average cost {fmt(avg)})</ThemedText>
+                                <ThemedText type="caption" className="flex-1 mr-3">Realised gain on this sale (average cost {fmt(avg)} per {unit(1)})</ThemedText>
                                 <ThemedText type="figure" style={{ color: sellResult >= 0 ? colors.income : colors.expense }}>
                                     {formatSigned(sellResult, fmt)}
                                 </ThemedText>

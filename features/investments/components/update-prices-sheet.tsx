@@ -19,7 +19,7 @@ import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatPrice, parseFormNumber, PRICE_DECIMALS, type HoldingSummary } from '../utils';
+import { formatPrice, parseFormNumber, PRICE_DECIMALS, priceTerm, type HoldingSummary } from '../utils';
 import { DateRow, Field, formatShortDay } from './form-parts';
 
 interface UpdatePricesSheetProps {
@@ -130,14 +130,19 @@ export function UpdatePricesSheet({ visible, onClose, holdings }: UpdatePricesSh
                 contentContainerStyle={{ paddingBottom: 24 }}
             >
                 <ThemedText type="caption" className="mb-4">
-                    Type the latest price per unit. Leave a field empty to keep its current price.
+                    {holdings.every(s => s.holding.asset_type === 'mutual_fund')
+                        ? 'Type the latest NAV per unit. Leave a field empty to keep its current NAV.'
+                        : holdings.some(s => s.holding.asset_type === 'mutual_fund')
+                            ? 'Type the latest price per unit (NAV for mutual funds). Leave a field empty to keep the current one.'
+                            : 'Type the latest price per unit. Leave a field empty to keep its current price.'}
                 </ThemedText>
 
                 {holdings.map(s => {
                     const h = s.holding;
+                    const term = priceTerm(h.asset_type);
                     const last = s.price
-                        ? `Now ${formatPrice(s.price.price, fmt, symbol)} · ${formatShortDay(s.price.date)}`
-                        : 'No price yet';
+                        ? `${term} now ${formatPrice(s.price.price, fmt, symbol)} · ${formatShortDay(s.price.date)}`
+                        : `No ${term === 'NAV' ? 'NAV' : 'price'} yet`;
                     return (
                         <Field
                             key={h.id}

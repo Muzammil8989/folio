@@ -20,7 +20,8 @@ import {
     type SegmentOption,
 } from '@/components/common';
 import { Pressable } from '@/components/common/pressable';
-import { FigureTile, FilterChips } from '@/features/investments/components/form-parts';
+import { FIGURE_DEFINITIONS, FigureTile, FilterChips } from '@/features/investments/components/form-parts';
+import { ReturnsBreakdown } from '@/features/investments/components/returns-breakdown';
 import { HoldingFormSheet } from '@/features/investments/components/holding-form-sheet';
 import { HoldingRow } from '@/features/investments/components/holding-row';
 import { UpdatePricesSheet } from '@/features/investments/components/update-prices-sheet';
@@ -47,7 +48,7 @@ import { UserService } from '@/features/user/services/user-service';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import type { AssetType } from '@/lib/db/schema';
 import { getCurrencySymbol } from '@/lib/utils/currency';
-import { toISODateString } from '@/lib/utils/date';
+import { formatTooltipDate, toISODateString } from '@/lib/utils/date';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -201,34 +202,62 @@ export default function InvestmentsScreen() {
                         <View
                             className="px-5 pt-3"
                             accessible
-                            accessibilityLabel={`Portfolio value ${fmt(summary.value)}. Unrealised ${formatSigned(summary.unrealized, fmt)}, ${formatPct(summary.unrealizedPct)}.`}
+                            accessibilityLabel={`Portfolio value ${fmt(summary.value)}. Total return ${formatSigned(summary.totalReturn, fmt)}, ${formatPct(summary.totalReturnPct)}.`}
                         >
                             <ThemedText type="kicker">Value now</ThemedText>
                             <ThemedText type="figureLg" className="text-[38px] leading-[46px]" numberOfLines={1} adjustsFontSizeToFit>
                                 {fmt(summary.value)}
                             </ThemedText>
-                            <ThemedText type="figure" className="text-sm" style={{ color: unrealTone }}>
-                                {summary.unrealized >= 0 ? '▲' : '▼'} {formatSigned(summary.unrealized, fmt)} ({formatPct(summary.unrealizedPct)})
-                                <ThemedText type="caption"> on what you hold now</ThemedText>
+                            <ThemedText type="figure" className="text-sm" style={{ color: totalTone }}>
+                                {summary.totalReturn >= 0 ? '▲' : '▼'} {formatSigned(summary.totalReturn, fmt)} ({formatPct(summary.totalReturnPct)})
+                                <ThemedText type="caption"> total return</ThemedText>
                             </ThemedText>
+                            <ThemedText type="caption" className="mt-0.5">Total return = {FIGURE_DEFINITIONS.totalReturn.toLowerCase()}</ThemedText>
                         </View>
 
                         <View className="px-5 mt-5 flex-row flex-wrap" style={{ gap: 10 }}>
-                            <FigureTile label="Invested" value={fmt(summary.invested)} detail={`${summary.openCount} open ${summary.openCount === 1 ? 'holding' : 'holdings'}`} />
                             <FigureTile
-                                label="Total return"
-                                value={formatSigned(summary.totalReturn, fmt)}
-                                valueColor={totalTone}
-                                detail={formatPct(summary.totalReturnPct)}
+                                label="Invested"
+                                value={fmt(summary.invested)}
+                                detail={`${summary.openCount} open ${summary.openCount === 1 ? 'holding' : 'holdings'}`}
+                                definition={FIGURE_DEFINITIONS.invested}
+                            />
+                            <FigureTile
+                                label="Unrealised"
+                                value={formatSigned(summary.unrealized, fmt)}
+                                valueColor={unrealTone === colors.textMuted ? undefined : unrealTone}
+                                detail={formatPct(summary.unrealizedPct)}
+                                definition={FIGURE_DEFINITIONS.unrealised}
                             />
                             <FigureTile
                                 label="Realised"
                                 value={formatSigned(summary.realized, fmt)}
                                 valueColor={Math.abs(summary.realized) < 0.005 ? undefined : summary.realized >= 0 ? colors.income : colors.expense}
                                 detail="From sales"
+                                definition={FIGURE_DEFINITIONS.realised}
                             />
-                            <FigureTile label="Dividends" value={fmt(summary.dividends)} detail="Received" />
+                            <FigureTile
+                                label="Dividends"
+                                value={fmt(summary.dividends)}
+                                detail="Received"
+                                definition={FIGURE_DEFINITIONS.dividends}
+                            />
                         </View>
+
+                        <ReturnsBreakdown
+                            fmt={fmt}
+                            figures={{
+                                value: summary.value,
+                                cost: summary.invested,
+                                unrealized: summary.unrealized,
+                                unrealizedPct: summary.unrealizedPct,
+                                realized: summary.realized,
+                                dividends: summary.dividends,
+                                totalReturn: summary.totalReturn,
+                                totalReturnPct: summary.totalReturnPct,
+                                totalBought: summary.totalBought,
+                            }}
+                        />
 
                         {staleCount > 0 && (
                             <Pressable
@@ -259,6 +288,7 @@ export default function InvestmentsScreen() {
                                 <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="mb-3" />
                                 <LineChart
                                     labels={series.map(p => p.label)}
+                                    tooltipLabels={series.map(p => formatTooltipDate(p.date))}
                                     series={[
                                         { key: 'value', label: 'Value', color: chart.accent, values: series.map(p => p.value), fill: true },
                                         { key: 'invested', label: 'Invested', color: chart.muted, values: series.map(p => p.invested), dashed: true },

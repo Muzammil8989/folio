@@ -12,7 +12,8 @@ import {
     ThemedText,
 } from '@/components/common';
 import { Pressable } from '@/components/common/pressable';
-import { ConfirmDialog, FigureTile, formatShortDay } from '@/features/investments/components/form-parts';
+import { ConfirmDialog, FIGURE_DEFINITIONS, FigureTile, formatShortDay } from '@/features/investments/components/form-parts';
+import { ReturnsBreakdown } from '@/features/investments/components/returns-breakdown';
 import { HoldingFormSheet } from '@/features/investments/components/holding-form-sheet';
 import { TradeSheet } from '@/features/investments/components/trade-sheet';
 import { UpdatePricesSheet } from '@/features/investments/components/update-prices-sheet';
@@ -24,6 +25,7 @@ import {
     formatQuantity,
     formatSigned,
     priceHistory,
+    priceTerm,
     sortTrades,
     TRADE_LABELS,
     unitLabel,
@@ -39,6 +41,7 @@ import { deleteHolding, type InvestmentTrade } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { getCurrencySymbol } from '@/lib/utils/currency';
+import { formatTooltipDate } from '@/lib/utils/date';
 import { useModalActions } from '@/providers/modal-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -98,6 +101,7 @@ export default function HoldingScreen() {
 
     const p = summary.position;
     const unit = (q: number) => unitLabel(holding.asset_type, q);
+    const term = priceTerm(holding.asset_type);
     const tone = (n: number) => (Math.abs(n) < 0.005 ? undefined : n >= 0 ? colors.income : colors.expense);
     const subtitle = [holding.symbol, holding.market, ASSET_TYPE_LABELS[holding.asset_type]].filter(Boolean).join(' · ');
     const handleDelete = async () => {
@@ -148,12 +152,13 @@ export default function HoldingScreen() {
                         {summary.totalReturn >= 0 ? '▲' : '▼'} {formatSigned(summary.totalReturn, fmt)} ({formatPct(summary.totalReturnPct)})
                         <ThemedText type="caption"> total return</ThemedText>
                     </ThemedText>
+                    <ThemedText type="caption" className="mt-0.5">Total return = {FIGURE_DEFINITIONS.totalReturn.toLowerCase()}</ThemedText>
                 </View>
 
-                {/* ── Price ─────────────────────────────────────────── */}
+                {/* ── Price / NAV ───────────────────────────────────── */}
                 <View className="mx-5 mt-4 flex-row items-center rounded-xl px-4 py-3" style={{ backgroundColor: colors.backgroundAlt }}>
                     <View className="flex-1">
-                        <ThemedText type="caption">Price per {unit(1)}</ThemedText>
+                        <ThemedText type="caption">Current {term} per {unit(1)}</ThemedText>
                         <ThemedText type="figure" className="text-base">
                             {summary.price ? formatPrice(summary.price.price, fmt, symbol) : 'Not set'}
                             {!!summary.price && (
@@ -169,17 +174,52 @@ export default function HoldingScreen() {
                 {/* ── Position ──────────────────────────────────────── */}
                 <View className="px-5 mt-4 flex-row flex-wrap" style={{ gap: 10 }}>
                     <FigureTile label="Quantity" value={formatQuantity(p.quantity)} detail={unit(p.quantity)} />
-                    <FigureTile label="Average cost" value={formatPrice(p.avgCost, fmt, symbol)} detail={`per ${unit(1)}, fees included`} />
-                    <FigureTile label="Invested" value={fmt(p.costBasis)} detail="In what you hold now" />
+                    <FigureTile
+                        label="Average cost"
+                        value={formatPrice(p.avgCost, fmt, symbol)}
+                        detail={`per ${unit(1)}`}
+                        definition={FIGURE_DEFINITIONS.avgCost}
+                    />
+                    <FigureTile label="Invested" value={fmt(p.costBasis)} definition={FIGURE_DEFINITIONS.invested} />
                     <FigureTile
                         label="Unrealised"
                         value={formatSigned(summary.unrealized, fmt)}
                         valueColor={tone(summary.unrealized)}
                         detail={formatPct(summary.unrealizedPct)}
+                        definition={FIGURE_DEFINITIONS.unrealised}
                     />
-                    <FigureTile label="Realised" value={formatSigned(p.realized, fmt)} valueColor={tone(p.realized)} detail="From sales" />
-                    <FigureTile label="Dividends" value={fmt(p.dividends)} detail={`Fees paid ${fmt(p.fees)}`} />
+                    <FigureTile
+                        label="Realised"
+                        value={formatSigned(p.realized, fmt)}
+                        valueColor={tone(p.realized)}
+                        detail="From sales"
+                        definition={FIGURE_DEFINITIONS.realised}
+                    />
+                    <FigureTile
+                        label="Dividends"
+                        value={fmt(p.dividends)}
+                        detail={`Fees paid ${fmt(p.fees)}`}
+                        definition={FIGURE_DEFINITIONS.dividends}
+                    />
                 </View>
+
+                {p.tradeCount > 0 && (
+                    <ReturnsBreakdown
+                        fmt={fmt}
+                        priceTerm={term}
+                        figures={{
+                            value: summary.marketValue,
+                            cost: p.costBasis,
+                            unrealized: summary.unrealized,
+                            unrealizedPct: summary.unrealizedPct,
+                            realized: p.realized,
+                            dividends: p.dividends,
+                            totalReturn: summary.totalReturn,
+                            totalReturnPct: summary.totalReturnPct,
+                            totalBought: p.totalBought,
+                        }}
+                    />
+                )}
 
                 {/* ── Actions ───────────────────────────────────────── */}
                 <View className="px-5 mt-5 flex-row" style={{ gap: 8 }}>
@@ -191,21 +231,22 @@ export default function HoldingScreen() {
                 {/* ── Price history ─────────────────────────────────── */}
                 {history.length >= 2 && (
                     <ChartCard
-                        kicker="Price history"
-                        title={`Price per ${unit(1)}`}
+                        kicker={`${term} history`}
+                        title={`${term} per ${unit(1)}`}
                         legend={[
-                            { label: 'Price', color: chart.accent },
+                            { label: term, color: chart.accent },
                             ...(p.quantity > 0 ? [{ label: 'Your average cost', color: chart.muted, dashed: true }] : []),
                         ]}
                     >
                         <LineChart
                             labels={history.map(h => formatShortDay(h.date))}
-                            series={[{ key: 'price', label: 'Price', color: chart.accent, values: history.map(h => h.price) }]}
+                            tooltipLabels={history.map(h => formatTooltipDate(h.date))}
+                            series={[{ key: 'price', label: term, color: chart.accent, values: history.map(h => h.price) }]}
                             reference={p.quantity > 0 ? { value: p.avgCost, color: chart.muted } : undefined}
                             zeroBased={false}
                             formatValue={v => formatPrice(v, fmt, symbol)}
                             formatAxis={v => (Math.abs(v) >= 1000 ? compactMoney(v, symbol) : `${symbol}${Number.parseFloat(v.toPrecision(3))}`)}
-                            accessibilityLabel={`Price history, from ${formatPrice(history[0].price, fmt, symbol)} to ${formatPrice(history[history.length - 1].price, fmt, symbol)}.`}
+                            accessibilityLabel={`${term} history, from ${formatPrice(history[0].price, fmt, symbol)} to ${formatPrice(history[history.length - 1].price, fmt, symbol)}.`}
                         />
                     </ChartCard>
                 )}
