@@ -7,7 +7,7 @@ import { logger } from '../logger';
  * Supports incremental schema evolution while maintaining data integrity
  */
 
-export const DATABASE_VERSION = 12; // Increment this when adding new migrations
+export const DATABASE_VERSION = 14; // Increment this when adding new migrations
 
 /**
  * Thrown when the schema can't be brought to DATABASE_VERSION. The database
@@ -440,6 +440,66 @@ const migrations: Migration[] = [
       );
     },
   },
+  {
+    version: 13,
+    description: 'Calculator: keep a history of finished calculations',
+    up: async (db: SQLite.SQLiteDatabase) => {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS calculator_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          expression TEXT NOT NULL,
+          result REAL NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    },
+  },
+  {
+    version: 14,
+    description: 'Portfolio: holdings, trades and manually entered prices',
+    up: async (db: SQLite.SQLiteDatabase) => {
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS investment_holdings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          symbol TEXT,
+          asset_type TEXT NOT NULL DEFAULT 'stock'
+            CHECK(asset_type IN ('stock', 'mutual_fund', 'etf', 'crypto', 'gold', 'bond', 'other')),
+          market TEXT,
+          current_price REAL CHECK(current_price IS NULL OR current_price >= 0),
+          price_updated_at TEXT,
+          color TEXT,
+          notes TEXT,
+          is_archived INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS investment_trades (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          holding_id INTEGER NOT NULL REFERENCES investment_holdings(id) ON DELETE CASCADE,
+          type TEXT NOT NULL CHECK(type IN ('buy', 'sell', 'dividend')),
+          date TEXT NOT NULL,
+          quantity REAL,
+          price REAL,
+          fees REAL NOT NULL DEFAULT 0,
+          amount REAL,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK(fees >= 0 AND ((type IN ('buy', 'sell') AND quantity > 0 AND price >= 0) OR (type = 'dividend' AND amount > 0)))
+        );
+        CREATE INDEX IF NOT EXISTS idx_investment_trades_holding_date ON investment_trades(holding_id, date);
+
+        CREATE TABLE IF NOT EXISTS investment_prices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          holding_id INTEGER NOT NULL REFERENCES investment_holdings(id) ON DELETE CASCADE,
+          date TEXT NOT NULL,
+          price REAL NOT NULL CHECK(price >= 0),
+          UNIQUE(holding_id, date)
+        );
+      `);
+    },
+  },
 ];
 
 /**
@@ -636,6 +696,10 @@ export async function clearDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
     logger.info('Clearing database and resetting schema...');
     // Drop tables to full reset schema (in correct dependency order)
     await db.execAsync(`
+      DROP TABLE IF EXISTS calculator_history;
+      DROP TABLE IF EXISTS investment_prices;
+      DROP TABLE IF EXISTS investment_trades;
+      DROP TABLE IF EXISTS investment_holdings;
       DROP TABLE IF EXISTS loan_payments;
       DROP TABLE IF EXISTS loans;
       DROP TABLE IF EXISTS household_periods_history;

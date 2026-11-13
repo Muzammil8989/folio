@@ -16,6 +16,9 @@ import { useAccounts } from '@/features/accounts/hooks/use-accounts';
 import { BudgetCard } from '@/features/budgets/components/budget-card';
 import { useBudgets, type BudgetWithSpend } from '@/features/budgets/hooks/use-budgets';
 import { getBudgetStatus } from '@/features/budgets/utils';
+import { PortfolioCard } from '@/features/investments/components/portfolio-card';
+import { usePortfolio } from '@/features/investments/hooks/use-portfolio';
+import { formatPct, portfolioSeries } from '@/features/investments/utils';
 import { ToolsGrid } from '@/features/overview/components/tools-grid';
 import { TransactionItem } from '@/features/overview/components/transaction-item';
 import { CashflowBars } from '@/features/reports/components/cashflow-bars';
@@ -88,6 +91,8 @@ export default function OverviewScreen() {
     // Only the 5 rows Recent shows; month figures are totalled in SQL.
     const { transactions: recent, loading: txLoading, refresh } = useTransactions(undefined, RECENT_OPTIONS);
     const { goals, loading: goalsLoading, refresh: refreshGoals } = useSavingsGoals();
+    const portfolio = usePortfolio();
+    const refreshPortfolio = portfolio.refresh;
     const { accounts, refresh: refreshAccounts } = useAccounts();
     const { budgets, refresh: refreshBudgets } = useBudgets();
     const [monthly, setMonthly] = useState<MonthlyTotals[]>([]);
@@ -120,9 +125,19 @@ export default function OverviewScreen() {
 
     const handleRefresh = useCallback(async () => {
         setIsRefreshing(true);
-        await Promise.all([refresh(), refreshGoals(), refreshAccounts(), refreshBudgets(), loadMonthly()]);
+        await Promise.all([refresh(), refreshGoals(), refreshAccounts(), refreshBudgets(), loadMonthly(), refreshPortfolio()]);
         setIsRefreshing(false);
-    }, [refresh, refreshGoals, refreshAccounts, refreshBudgets, loadMonthly]);
+    }, [refresh, refreshGoals, refreshAccounts, refreshBudgets, loadMonthly, refreshPortfolio]);
+
+    // Portfolio: a six-month sparkline for the card, and the value for the Tools row.
+    const hasPortfolio = portfolio.holdings.length > 0;
+    const portfolioSpark = useMemo(
+        () => (hasPortfolio ? portfolioSeries(portfolio.holdings, portfolio.tradesByHolding, portfolio.pricesByHolding, '6m') : []),
+        [hasPortfolio, portfolio.holdings, portfolio.tradesByHolding, portfolio.pricesByHolding],
+    );
+    const portfolioHint = hasPortfolio
+        ? `${UserService.formatCurrency(portfolio.summary.value, profile.currency)} · ${formatPct(portfolio.summary.totalReturnPct)} total return`
+        : undefined;
 
     const stats = useMemo(() => {
         // Transfers (lending, between accounts, savings) and future-dated
@@ -360,6 +375,15 @@ export default function OverviewScreen() {
                             </Section>
                         )}
 
+                        {/* ── Portfolio ───────────────────────────────────── */}
+                        {hasPortfolio && (
+                            <PortfolioCard
+                                summary={portfolio.summary}
+                                series={portfolioSpark}
+                                fmt={n => UserService.formatCurrency(n, currency)}
+                            />
+                        )}
+
                         {/* ── Recent ──────────────────────────────────────── */}
                         <Section
                             title="Recent activity"
@@ -382,7 +406,7 @@ export default function OverviewScreen() {
 
                         {/* ── Tools ───────────────────────────────────────── */}
                         <Section title="Tools">
-                            <ToolsGrid />
+                            <ToolsGrid portfolioHint={portfolioHint} />
                         </Section>
                     </>
                 )}

@@ -4,7 +4,7 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { View } from 'react-native';
-import Animated, { Easing, FadeInUp, FadeOutDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface DeleteConfirmSheetProps {

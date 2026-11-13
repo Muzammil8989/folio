@@ -3,7 +3,7 @@
  * its own expenses, and a history entry per month.
  */
 jest.unmock('@/lib/db/db-client');
-import { runMigrations } from '@/lib/db/migrations';
+import { DATABASE_VERSION, runMigrations } from '@/lib/db/migrations';
 import * as q from '@/lib/db/queries';
 import { createTestDb, TestDb } from '@/tests/helpers/test-db';
 
@@ -167,7 +167,7 @@ describe('migration v12', () => {
 
     await runMigrations(db.expo);
 
-    expect(db.raw.pragma('user_version', { simple: true })).toBe(12);
+    expect(db.raw.pragma('user_version', { simple: true })).toBe(DATABASE_VERSION);
     const [june] = await q.listHouseholdHistory();
     expect(june).toMatchObject({ entries_kept: false, spent_amount: 250, expense_count: 2 });
     expect((await q.getHouseholdConfig())!.income_confirmed).toBe(true);

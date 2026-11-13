@@ -15,6 +15,7 @@ const SECTIONS: { key: keyof ReportSections; label: string }[] = [
     { key: 'transactions', label: 'Transaction list' },
     { key: 'categories', label: 'Spending by category' },
     { key: 'budgets', label: 'Budget standing' },
+    { key: 'investments', label: 'Portfolio' },
 ];
 
 interface ExportSheetProps {
@@ -53,7 +54,7 @@ export function ExportSheet({ visible, onClose }: ExportSheetProps) {
                 ownerName: profile.name,
                 sections,
             });
-            if (data.summary.transactionCount === 0 && data.budgets.length === 0) {
+            if (data.summary.transactionCount === 0 && data.budgets.length === 0 && data.holdings.length === 0) {
                 toast.error('Nothing recorded in this period to export');
                 return;
             }

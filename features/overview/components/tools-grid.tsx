@@ -23,17 +23,20 @@ const TOOLS: Tool[] = [
     { icon: 'swap-horizontal-outline', label: 'Loans', hint: 'Money lent and owed', href: '/loans' as Href },
     { icon: 'card-outline', label: 'Accounts', hint: 'Wallets and cards', href: '/payment-methods' as Href },
     { icon: 'pricetags-outline', label: 'Categories', hint: 'Spending categories', href: '/categories' as Href },
-    { icon: 'document-text-outline', label: 'Export', hint: 'PDF or Excel report', action: 'export' },
+    { icon: 'calculator-outline', label: 'Calculator', hint: 'Quick sums with history', href: '/calculator' as Href },
+    { icon: 'trending-up-outline', label: 'Portfolio', hint: 'Stocks, funds, crypto and gold', href: '/investments' as Href, wide: true },
+    { icon: 'document-text-outline', label: 'Export', hint: 'PDF or Excel report', action: 'export', wide: true },
     { icon: 'settings-outline', label: 'Settings', hint: 'Profile, currency, security and backup', href: '/settings' as Href, wide: true },
 ];
 
-export function ToolsGrid() {
+/** `portfolioHint` replaces the Portfolio row's subtitle, e.g. its current value. */
+export function ToolsGrid({ portfolioHint }: { portfolioHint?: string } = {}) {
     const colors = useThemeColors();
     const { openModal } = useModalActions();
 
     return (
         <View className="flex-row flex-wrap -mx-1">
-            {TOOLS.map(tool => (
+            {TOOLS.map(t => (t.label === 'Portfolio' && portfolioHint ? { ...t, hint: portfolioHint } : t)).map(tool => (
                 <View key={tool.label} className={tool.wide ? 'w-full p-1' : 'w-1/3 p-1'}>
                     <Pressable
                         onPress={() => ('href' in tool ? router.push(tool.href) : openModal(tool.action))}

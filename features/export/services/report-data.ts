@@ -1,5 +1,6 @@
 import { loadBudgetsWithSpend } from '@/features/budgets/services/budget-spend';
-import { getExpenseByCategory, getMonthlyTotals, getPeriodTotals, getTransactions, isTransferCategory, type MonthlyTotals } from '@/lib/db/queries';
+import { ASSET_TYPE_LABELS, groupByHolding, summarizeHolding } from '@/features/investments/utils';
+import { getExpenseByCategory, getMonthlyTotals, getPeriodTotals, getPortfolioData, getTransactions, isTransferCategory, type MonthlyTotals } from '@/lib/db/queries';
 import { parseLocalDate, toISODateString } from '@/lib/utils/date';
 
 export interface ReportTransaction {
@@ -29,6 +30,26 @@ export interface ReportBudget {
     percentUsed: number;
 }
 
+export interface ReportHolding {
+    name: string;
+    symbol: string;
+    type: string;
+    quantity: number;
+    /** Per unit, fees included. */
+    avgCost: number;
+    /** Cost of the units held now. */
+    invested: number;
+    /** Latest known price per unit; null when none was ever entered. */
+    price: number | null;
+    value: number;
+    unrealized: number;
+    realized: number;
+    dividends: number;
+    totalReturn: number;
+    /** Percent of everything spent buying; null without any buys. */
+    totalReturnPct: number | null;
+}
+
 export interface ReportData {
     title: string;
     /** "This month", "Last 3 months", … */
@@ -52,15 +73,18 @@ export interface ReportData {
     transactions: ReportTransaction[];
     /** Current-period budget standing (budgets are live, not historical). */
     budgets: ReportBudget[];
+    /** Portfolio as of today (a separate record, not part of income or spending). */
+    holdings: ReportHolding[];
 }
 
 export interface ReportSections {
     transactions: boolean;
     categories: boolean;
     budgets: boolean;
+    investments: boolean;
 }
 
-export const ALL_SECTIONS: ReportSections = { transactions: true, categories: true, budgets: true };
+export const ALL_SECTIONS: ReportSections = { transactions: true, categories: true, budgets: true, investments: true };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -93,13 +117,40 @@ export async function buildReportData(opts: {
     const months = Math.max(1, monthSpan(start, toISODateString(anchor)));
     // Totals come from SQL; the rows themselves are only loaded when the
     // transactions section is included.
-    const [totals, rows, byCategory, monthly, budgets] = await Promise.all([
+    const [totals, rows, byCategory, monthly, budgets, portfolio] = await Promise.all([
         getPeriodTotals(start, end),
         sections.transactions ? getTransactions({ startDate: start, endDate: end }) : Promise.resolve([]),
         getExpenseByCategory(start, end),
         getMonthlyTotals(months, anchor),
         sections.budgets ? loadBudgetsWithSpend() : Promise.resolve([]),
+        sections.investments ? getPortfolioData() : Promise.resolve(null),
     ]);
+
+    const holdings: ReportHolding[] = [];
+    if (portfolio) {
+        const tradesByHolding = groupByHolding(portfolio.trades);
+        const summaries = portfolio.holdings
+            .map(h => summarizeHolding(h, tradesByHolding.get(h.id) ?? []))
+            .filter(s => s.position.tradeCount > 0)
+            .sort((a, b) => Number(b.isOpen) - Number(a.isOpen) || b.marketValue - a.marketValue);
+        for (const s of summaries) {
+            holdings.push({
+                name: s.holding.name,
+                symbol: s.holding.symbol ?? '',
+                type: ASSET_TYPE_LABELS[s.holding.asset_type],
+                quantity: s.position.quantity,
+                avgCost: s.position.avgCost,
+                invested: round2(s.position.costBasis),
+                price: s.price?.price ?? null,
+                value: round2(s.marketValue),
+                unrealized: round2(s.unrealized),
+                realized: round2(s.position.realized),
+                dividends: round2(s.position.dividends),
+                totalReturn: round2(s.totalReturn),
+                totalReturnPct: s.totalReturnPct == null ? null : Math.round(s.totalReturnPct * 10) / 10,
+            });
+        }
+    }
 
     const income = round2(totals.income);
     const expense = round2(totals.expense);
@@ -149,6 +200,7 @@ export async function buildReportData(opts: {
             remaining: round2(b.remaining),
             percentUsed: Math.round(b.percentUsed),
         })),
+        holdings,
     };
 }
 

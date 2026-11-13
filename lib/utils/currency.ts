@@ -58,8 +58,16 @@ const GROUPED: Record<',' | '.', RegExp> = {
  * Grouping must be well-formed, so "1,2,3" is rejected rather than guessed.
  * Returns NaN for anything that isn't a number. A leading minus is allowed
  * (e.g. a credit card's opening balance); amount forms reject values <= 0.
+ * `decimals` sets the rounding: 2 for money, more for share quantities.
+ * `decimalMark` is the device's decimal mark (see deviceDecimalMark): when
+ * given, a lone mark of that kind is always the decimal point, so "1,125"
+ * reads as 1.125 on a phone that writes decimals with a comma.
  */
-export function parseAmount(input: string | null | undefined): number {
+export function parseAmount(
+    input: string | null | undefined,
+    decimals = 2,
+    decimalMark?: '.' | ',',
+): number {
     const s = (input ?? '').replace(/\s/g, '');
     const m = s.match(/^(-?)([\d.,]+)$/);
     if (!m || !/\d/.test(m[2])) return NaN;
@@ -84,7 +92,11 @@ export function parseAmount(input: string | null | undefined): number {
         const count = body.split(mark).length - 1;
         // "1,234" and "1,234,567" are thousands; so is "1.234.567" (repeated dots).
         // A single dot stays a decimal point ("1.234" → 1.23 after rounding).
-        if (GROUPED[mark].test(body) && (mark === ',' || count > 1)) {
+        // Exception: with extra precision (share quantities, prices) "0,125"
+        // can only be a decimal, as no grouped number starts with 0.
+        const leadingZeroDecimal = decimals > 2 && count === 1 && /^0[.,]/.test(body);
+        const deviceDecimal = count === 1 && mark === decimalMark;
+        if (!leadingZeroDecimal && !deviceDecimal && GROUPED[mark].test(body) && (mark === ',' || count > 1)) {
             intPart = body.split(mark).join('');
         } else if (count === 1) {
             [intPart, fracPart] = body.split(mark);
@@ -95,7 +107,17 @@ export function parseAmount(input: string | null | undefined): number {
 
     if (!/^\d*$/.test(intPart) || !/^\d*$/.test(fracPart)) return NaN;
     const value = Number(`${intPart || '0'}.${fracPart || '0'}`);
-    return (sign * Math.round(value * 100)) / 100;
+    const scale = Math.pow(10, decimals);
+    return (sign * Math.round(value * scale)) / scale;
+}
+
+/** The decimal mark this device writes numbers with: "," in much of Europe, "." elsewhere. */
+export function deviceDecimalMark(): '.' | ',' {
+    try {
+        return (1.5).toLocaleString().includes(',') ? ',' : '.';
+    } catch {
+        return '.';
+    }
 }
 
 /** Format a raw number string with locale commas (e.g., "1234.56" → "1,234.56") */
