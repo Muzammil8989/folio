@@ -8,7 +8,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { reportFileStem, type ReportData } from './report-data';
 
-const C = {
+export const C = {
     paper: '#FFFFFF',
     ink: tokens.light.textPrimary,
     muted: tokens.light.textMuted,
@@ -29,8 +29,52 @@ export function escapeHtml(s: string): string {
         .replace(/'/g, '&#39;');
 }
 
-const fmtDate = (ymd: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }) =>
+export const fmtDate = (ymd: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }) =>
     parseLocalDate(ymd).toLocaleDateString('en-GB', opts);
+
+/** House style for printed reports, shared by every PDF the app makes. */
+export const REPORT_CSS = `
+  @page { margin: 18mm 16mm 20mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: ${C.ink}; background: ${C.paper};
+         font: 10.5pt/1.5 -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; }
+  .serif, h1, h2 { font-family: "Iowan Old Style", Georgia, "Times New Roman", serif; font-weight: 600; }
+  .kicker { font-size: 8pt; letter-spacing: .14em; text-transform: uppercase; color: ${C.muted}; font-weight: 700; }
+  header { border-bottom: 2px solid ${C.ink}; padding-bottom: 10pt; margin-bottom: 14pt; }
+  h1 { font-size: 26pt; line-height: 1.1; margin: 4pt 0 2pt; }
+  .meta { color: ${C.muted}; font-size: 9pt; }
+  .standfirst { font-size: 13pt; line-height: 1.55; margin: 0 0 16pt; font-weight: 400; }
+  .figures { display: flex; border-top: 1px solid ${C.rule}; border-bottom: 1px solid ${C.rule}; margin-bottom: 22pt; }
+  .fig { flex: 1; padding: 10pt 12pt 10pt 0; }
+  .fig + .fig { border-left: 1px solid ${C.rule}; padding-left: 12pt; }
+  .fig .v { font-size: 16pt; font-variant-numeric: tabular-nums; margin-top: 2pt; }
+  h2 { font-size: 15pt; margin: 0 0 8pt; padding-top: 10pt; border-top: 1px solid ${C.rule}; }
+  section { margin-bottom: 20pt; page-break-inside: avoid; }
+  section.flow { page-break-inside: auto; }
+  .axis { font: 8pt sans-serif; fill: ${C.muted}; }
+  .legend { font-size: 8.5pt; color: ${C.muted}; margin: 4pt 0 0; }
+  .sw { display: inline-block; width: 8pt; height: 8pt; border-radius: 1.5pt; margin: 0 4pt -1pt 10pt; }
+  .sw:first-child { margin-left: 0; }
+  .cat { margin-bottom: 7pt; }
+  .cat-row { display: flex; justify-content: space-between; font-size: 9.5pt; margin-bottom: 2pt; }
+  .pct { color: ${C.muted}; display: inline-block; width: 38pt; text-align: right; }
+  .track { height: 5pt; background: ${C.rule}; border-radius: 1pt; }
+  .bar { height: 5pt; background: ${C.accent}; border-radius: 1pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  thead { display: table-header-group; }
+  th { text-align: left; font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: ${C.muted};
+       border-bottom: 1px solid ${C.ink}; padding: 4pt 6pt 4pt 0; }
+  td { border-bottom: 1px solid ${C.rule}; padding: 5pt 6pt 5pt 0; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th.num { text-align: right; }
+  .nowrap { white-space: nowrap; }
+  .in { color: ${C.income}; }
+  .out { color: ${C.expense}; }
+  .note { color: ${C.muted}; font-size: 8pt; }
+  tfoot td { border-bottom: none; border-top: 1px solid ${C.ink}; font-weight: 600; }
+  footer { margin-top: 24pt; padding-top: 6pt; border-top: 1px solid ${C.rule}; color: ${C.muted}; font-size: 8pt; }
+`;
 
 function cashflowSvg(data: ReportData): string {
     const rows = data.monthly;
@@ -113,48 +157,7 @@ export function buildReportHtml(data: ReportData, period?: PeriodFilter): string
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(data.title)} — ${escapeHtml(data.periodLabel)}</title>
-<style>
-  @page { margin: 18mm 16mm 20mm; }
-  * { box-sizing: border-box; }
-  body { margin: 0; color: ${C.ink}; background: ${C.paper};
-         font: 10.5pt/1.5 -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; }
-  .serif, h1, h2 { font-family: "Iowan Old Style", Georgia, "Times New Roman", serif; font-weight: 600; }
-  .kicker { font-size: 8pt; letter-spacing: .14em; text-transform: uppercase; color: ${C.muted}; font-weight: 700; }
-  header { border-bottom: 2px solid ${C.ink}; padding-bottom: 10pt; margin-bottom: 14pt; }
-  h1 { font-size: 26pt; line-height: 1.1; margin: 4pt 0 2pt; }
-  .meta { color: ${C.muted}; font-size: 9pt; }
-  .standfirst { font-size: 13pt; line-height: 1.55; margin: 0 0 16pt; font-weight: 400; }
-  .figures { display: flex; border-top: 1px solid ${C.rule}; border-bottom: 1px solid ${C.rule}; margin-bottom: 22pt; }
-  .fig { flex: 1; padding: 10pt 12pt 10pt 0; }
-  .fig + .fig { border-left: 1px solid ${C.rule}; padding-left: 12pt; }
-  .fig .v { font-size: 16pt; font-variant-numeric: tabular-nums; margin-top: 2pt; }
-  h2 { font-size: 15pt; margin: 0 0 8pt; padding-top: 10pt; border-top: 1px solid ${C.rule}; }
-  section { margin-bottom: 20pt; page-break-inside: avoid; }
-  section.flow { page-break-inside: auto; }
-  .axis { font: 8pt sans-serif; fill: ${C.muted}; }
-  .legend { font-size: 8.5pt; color: ${C.muted}; margin: 4pt 0 0; }
-  .sw { display: inline-block; width: 8pt; height: 8pt; border-radius: 1.5pt; margin: 0 4pt -1pt 10pt; }
-  .sw:first-child { margin-left: 0; }
-  .cat { margin-bottom: 7pt; }
-  .cat-row { display: flex; justify-content: space-between; font-size: 9.5pt; margin-bottom: 2pt; }
-  .pct { color: ${C.muted}; display: inline-block; width: 38pt; text-align: right; }
-  .track { height: 5pt; background: ${C.rule}; border-radius: 1pt; }
-  .bar { height: 5pt; background: ${C.accent}; border-radius: 1pt; }
-  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-  thead { display: table-header-group; }
-  th { text-align: left; font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: ${C.muted};
-       border-bottom: 1px solid ${C.ink}; padding: 4pt 6pt 4pt 0; }
-  td { border-bottom: 1px solid ${C.rule}; padding: 5pt 6pt 5pt 0; vertical-align: top; }
-  tr { page-break-inside: avoid; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  th.num { text-align: right; }
-  .nowrap { white-space: nowrap; }
-  .in { color: ${C.income}; }
-  .out { color: ${C.expense}; }
-  .note { color: ${C.muted}; font-size: 8pt; }
-  tfoot td { border-bottom: none; border-top: 1px solid ${C.ink}; font-weight: 600; }
-  footer { margin-top: 24pt; padding-top: 6pt; border-top: 1px solid ${C.rule}; color: ${C.muted}; font-size: 8pt; }
-</style>
+<style>${REPORT_CSS}</style>
 </head>
 <body>
   <header>
@@ -200,14 +203,19 @@ export function buildReportHtml(data: ReportData, period?: PeriodFilter): string
 </html>`;
 }
 
-/** Render the report to PDF, give it a readable file name, and open the share sheet. Returns the file URI. */
-export async function exportPdf(data: ReportData, period?: PeriodFilter): Promise<string> {
-    const { uri: tmp } = await Print.printToFileAsync({ html: buildReportHtml(data, period) });
-    const uri = `${FileSystem.cacheDirectory}${reportFileStem(data)}.pdf`;
+/** Render HTML to a PDF with a readable file name and open the share sheet. Returns the file URI. */
+export async function writeAndSharePdf(html: string, fileStem: string, dialogTitle = 'Share PDF report'): Promise<string> {
+    const { uri: tmp } = await Print.printToFileAsync({ html });
+    const uri = `${FileSystem.cacheDirectory}${fileStem}.pdf`;
     await FileSystem.deleteAsync(uri, { idempotent: true });
     await FileSystem.moveAsync({ from: tmp, to: uri });
     if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: 'Share PDF report' });
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle });
     }
     return uri;
+}
+
+/** Render the report to PDF, give it a readable file name, and open the share sheet. Returns the file URI. */
+export async function exportPdf(data: ReportData, period?: PeriodFilter): Promise<string> {
+    return writeAndSharePdf(buildReportHtml(data, period), reportFileStem(data));
 }

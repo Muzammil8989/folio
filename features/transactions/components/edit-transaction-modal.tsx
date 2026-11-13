@@ -9,6 +9,7 @@ import { useCategories } from '@/features/categories/hooks/use-categories';
 import { Transaction } from '../hooks/use-transactions';
 import { createRecurringExpense, getAccountsWithBalance, getActiveRecurringByCategory, updateTransaction } from '@/lib/db/queries';
 import { checkSpendable } from '../utils';
+import { NotificationService, type BudgetAlertEntry } from '@/features/notifications/services/notification-service';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { POPULAR_CURRENCIES, UserService } from '@/features/user/services/user-service';
@@ -135,6 +136,15 @@ export function EditTransactionModal({ visible, transaction, onClose, onSuccess 
                 // null (not undefined) so clearing the note is actually saved
                 notes: notes.trim() || null,
             });
+
+            if (transactionType === 'expense') {
+                // Fire-and-forget: judge each budget on the edit's net change.
+                const entries: BudgetAlertEntry[] = [{ categoryId: selectedCategoryId, amount: parsedAmount, date }];
+                if (transaction.type === 'expense' && transaction.category_id != null) {
+                    entries.push({ categoryId: transaction.category_id, amount: -transaction.amount, date: transaction.date ?? undefined });
+                }
+                NotificationService.checkBudgetAlerts(entries).catch(() => {});
+            }
 
             if (isRecurring) {
                 await createRecurringExpense({
