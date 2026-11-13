@@ -5,6 +5,7 @@ import { ExpenseItem } from '@/features/household/components/expense-item';
 import { IncomeSetupModal } from '@/features/household/components/income-setup-modal';
 import { AddExpenseModal } from '@/features/household/components/add-expense-modal';
 import { TransferModal } from '@/features/household/components/transfer-modal';
+import { HouseholdExportSheet } from '@/features/household/components/household-export-sheet';
 import { useHousehold } from '@/features/household/hooks/use-household';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { useUser } from '@/features/user/context/user-context';
@@ -12,6 +13,7 @@ import { UserService } from '@/features/user/services/user-service';
 import { confirmHouseholdIncome, deleteHouseholdExpenseWithLink, HouseholdExpenseWithCategory } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
+import { NotificationService } from '@/features/notifications/services/notification-service';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -195,6 +197,7 @@ export default function HouseholdScreen() {
     const [deletingExpense, setDeletingExpense] = useState<HouseholdExpenseWithCategory | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [transferVisible, setTransferVisible] = useState(false);
+    const [exportVisible, setExportVisible] = useState(false);
 
     const openAddExpense = () => {
         if (config && summary.remaining <= 0) {
@@ -247,6 +250,18 @@ export default function HouseholdScreen() {
                     subtitle="Track home expenses separately"
                     right={
                         <View className="flex-row items-center gap-2">
+                            {config && (
+                                <Pressable
+                                    onPress={() => setExportVisible(true)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Export this period as PDF or Excel"
+                                    className="w-11 h-11 rounded-xl items-center justify-center"
+                                    style={{ borderWidth: 1, borderColor: colors.borderStrong }}
+                                    hitSlop={6}
+                                >
+                                    <Ionicons name="share-outline" size={20} color={colors.primary} />
+                                </Pressable>
+                            )}
                             <Pressable
                                 onPress={() => router.push('/household-history')}
                                 className="w-11 h-11 rounded-xl items-center justify-center"
@@ -387,7 +402,11 @@ export default function HouseholdScreen() {
             <IncomeSetupModal
                 visible={incomeModalVisible}
                 onClose={() => setIncomeModalVisible(false)}
-                onSuccess={() => { setIncomeModalVisible(false); refresh(); }}
+                onSuccess={() => {
+                    setIncomeModalVisible(false);
+                    refresh();
+                    NotificationService.scheduleHouseholdPeriodReminder().catch(() => {});
+                }}
                 existingConfig={config}
                 currencyCode={currencyCode}
             />
@@ -407,6 +426,12 @@ export default function HouseholdScreen() {
                 onSuccess={() => { setTransferVisible(false); refresh(); }}
                 remaining={summary.remaining}
                 currencyCode={currencyCode}
+            />
+
+            <HouseholdExportSheet
+                visible={exportVisible}
+                scope={{ kind: 'current' }}
+                onClose={() => setExportVisible(false)}
             />
 
             {deletingExpense && (

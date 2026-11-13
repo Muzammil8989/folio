@@ -11,6 +11,7 @@ import { useModalActions } from '@/providers/modal-context';
 import { deleteLoan, transferLoanToAccount, LoanWithDetails } from '@/lib/db/queries';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
+import { NotificationService } from '@/features/notifications/services/notification-service';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,6 +40,12 @@ export default function LoansScreen() {
   const [deletingLoan, setDeletingLoan] = useState<LoanWithDetails | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Any loan change can move, add or clear due-date reminders: re-plan them.
+  const afterLoanChange = useCallback(() => {
+    triggerRefresh();
+    NotificationService.syncLoanReminders().catch(() => {});
+  }, [triggerRefresh]);
+
   const handleOpenAdd = () => {
     setEditingLoan(null);
     setAddVisible(true);
@@ -55,12 +62,12 @@ export default function LoansScreen() {
     try {
       await transferLoanToAccount(loan.id, categoryIds);
       toast.success('Transferred to account');
-      triggerRefresh();
+      afterLoanChange();
     } catch (e) {
       logger.error('LoansScreen: transfer failed', e);
       toast.error(e instanceof Error && e.message === 'Loan is not fully repaid yet' ? e.message : 'Transfer failed');
     }
-  }, [categoryIds, triggerRefresh]);
+  }, [categoryIds, afterLoanChange]);
 
   const handleConfirmDelete = async () => {
     if (!deletingLoan) return;
@@ -69,7 +76,7 @@ export default function LoansScreen() {
       await deleteLoan(deletingLoan.id);
       toast.success('Loan deleted');
       setDeletingLoan(null);
-      triggerRefresh();
+      afterLoanChange();
     } catch (e) {
       logger.error('LoansScreen: delete failed', e);
       toast.error('Failed to delete loan');
@@ -184,7 +191,7 @@ export default function LoansScreen() {
         <AddLoanModal
           visible={addVisible}
           onClose={() => { setAddVisible(false); setEditingLoan(null); }}
-          onSuccess={() => { setAddVisible(false); setEditingLoan(null); triggerRefresh(); }}
+          onSuccess={() => { setAddVisible(false); setEditingLoan(null); afterLoanChange(); }}
           editingLoan={editingLoan}
           currencyCode={currencyCode}
           categoryIds={categoryIds}
@@ -195,7 +202,7 @@ export default function LoansScreen() {
         <RecordPaymentModal
           visible
           onClose={() => setPaymentLoan(null)}
-          onSuccess={() => { setPaymentLoan(null); triggerRefresh(); }}
+          onSuccess={() => { setPaymentLoan(null); afterLoanChange(); }}
           loan={paymentLoan}
           currencyCode={currencyCode}
           categoryIds={categoryIds}

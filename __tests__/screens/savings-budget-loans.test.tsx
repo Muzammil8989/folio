@@ -1,6 +1,9 @@
 jest.unmock('@/lib/db/db-client');
 jest.mock('@/features/notifications/services/notification-service', () => ({
-  NotificationService: { sendSavingsMilestone: jest.fn().mockResolvedValue(undefined) },
+  NotificationService: {
+    sendSavingsMilestone: jest.fn().mockResolvedValue(undefined),
+    syncLoanReminders: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 import { DatePickerModal } from '@/features/transactions/components/date-picker-modal';

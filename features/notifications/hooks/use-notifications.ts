@@ -25,9 +25,9 @@ export function useNotifications() {
         await NotificationService.setEnabled(next);
         setEnabled(next);
         if (next) {
-            await NotificationService.scheduleDailyReminder();
+            await NotificationService.syncScheduledReminders();
         } else {
-            await NotificationService.cancelDailyReminder();
+            await NotificationService.cancelScheduledReminders();
         }
     }, [enabled]);
 

@@ -1,6 +1,7 @@
 import { EmptyState, ScreenHeader, ThemedText } from '@/components/common';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { formatPeriodRange } from '@/features/household/hooks/use-household';
+import { HouseholdExportSheet } from '@/features/household/components/household-export-sheet';
 import { useUser } from '@/features/user/context/user-context';
 import { isDbReady } from '@/lib/db/db-client';
 import {
@@ -151,6 +152,7 @@ export default function HouseholdHistoryScreen() {
     const [entries, setEntries] = useState<HouseholdPeriodHistory[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<HistoryFilter>('all');
+    const [exportVisible, setExportVisible] = useState(false);
 
     const filtered = useMemo(
         () => (filter === 'all' ? entries : entries.filter(e => e.period === filter)),
@@ -214,7 +216,22 @@ export default function HouseholdHistoryScreen() {
 
             {/* Header stays put; only the content below it scrolls */}
             <View style={{ paddingTop: insets.top }}>
-                <ScreenHeader title="Household History" subtitle="Every past month, with its own income and expenses" />
+                <ScreenHeader
+                    title="Household History"
+                    subtitle="Every past month, with its own income and expenses"
+                    right={
+                        <Pressable
+                            onPress={() => setExportVisible(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Export all periods as PDF or Excel"
+                            className="w-11 h-11 rounded-xl items-center justify-center"
+                            style={{ borderWidth: 1, borderColor: colors.borderStrong }}
+                            hitSlop={6}
+                        >
+                            <Ionicons name="share-outline" size={20} color={colors.primary} />
+                        </Pressable>
+                    }
+                />
             </View>
             {/* Single scroller: filter chips are the list header, periods are virtualized rows */}
             <FlatList
@@ -290,6 +307,12 @@ export default function HouseholdHistoryScreen() {
                         )}
                     </View>
                 }
+            />
+
+            <HouseholdExportSheet
+                visible={exportVisible}
+                scope={{ kind: 'all', filter }}
+                onClose={() => setExportVisible(false)}
             />
         </View>
     );

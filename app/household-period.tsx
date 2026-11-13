@@ -14,6 +14,7 @@ import {
     ThemedText,
 } from '@/components/common';
 import { ExpenseItem } from '@/features/household/components/expense-item';
+import { HouseholdExportSheet } from '@/features/household/components/household-export-sheet';
 import { SummaryBar } from '@/features/household/components/summary-bar';
 import { formatPeriodRange as formatRange } from '@/features/household/hooks/use-household';
 import { useUser } from '@/features/user/context/user-context';
@@ -120,6 +121,7 @@ export default function HouseholdPeriodScreen() {
     const [expenses, setExpenses] = useState<HouseholdExpenseWithCategory[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingIncome, setEditingIncome] = useState(false);
+    const [exportVisible, setExportVisible] = useState(false);
 
     const load = useCallback(async () => {
         if (!isDbReady() || !Number.isFinite(entryId)) {
@@ -155,7 +157,22 @@ export default function HouseholdPeriodScreen() {
     return (
         <View className="flex-1 bg-background dark:bg-dark-background">
             <View style={{ paddingTop: insets.top }}>
-                <ScreenHeader title={title} subtitle={entry ? `Household budget for this ${noun}` : undefined} />
+                <ScreenHeader
+                    title={title}
+                    subtitle={entry ? `Household budget for this ${noun}` : undefined}
+                    right={entry ? (
+                        <Pressable
+                            onPress={() => setExportVisible(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Export this ${noun} as PDF or Excel`}
+                            className="w-11 h-11 rounded-xl items-center justify-center"
+                            style={{ borderWidth: 1, borderColor: colors.borderStrong }}
+                            hitSlop={6}
+                        >
+                            <Ionicons name="share-outline" size={20} color={colors.primary} />
+                        </Pressable>
+                    ) : undefined}
+                />
             </View>
 
             {loading ? (
@@ -239,6 +256,14 @@ export default function HouseholdPeriodScreen() {
                             )}
                         </View>
                     }
+                />
+            )}
+
+            {entry && (
+                <HouseholdExportSheet
+                    visible={exportVisible}
+                    scope={{ kind: 'history', id: entry.id }}
+                    onClose={() => setExportVisible(false)}
                 />
             )}
 

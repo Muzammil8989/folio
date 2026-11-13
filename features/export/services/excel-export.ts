@@ -14,14 +14,19 @@ export function excelDateSerial(ymd: string): number {
     return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86_400_000;
 }
 
+/** Excel number format for money in this currency, e.g. "$"#,##0.00. */
+export function moneyFormat(currency: string): string {
+    const sym = getCurrencySymbol(currency).replace(/"/g, '');
+    return `"${sym}"#,##0.00;-"${sym}"#,##0.00`;
+}
+
 /**
  * Turn report data into a workbook. Money stays numeric (with a currency
  * number format) and dates are real date cells, so people can sort, filter
  * and sum in Excel / Sheets / Numbers.
  */
 export function buildWorkbook(data: ReportData): XLSX.WorkBook {
-    const sym = getCurrencySymbol(data.currency).replace(/"/g, '');
-    const money = `"${sym}"#,##0.00;-"${sym}"#,##0.00`;
+    const money = moneyFormat(data.currency);
     const pct = '0.0%';
     const date = 'yyyy-mm-dd';
 
@@ -114,22 +119,26 @@ export function buildWorkbook(data: ReportData): XLSX.WorkBook {
     return wb;
 }
 
-/** Build the .xlsx, save it to the cache directory, and open the share sheet. Returns the file URI. */
-export async function exportExcel(data: ReportData): Promise<string> {
-    // Yield one macrotask so the caller's spinner can paint before the
-    // synchronous workbook build blocks the JS thread.
-    await new Promise(resolve => setTimeout(resolve, 0));
-    const wb = buildWorkbook(data);
+/** Save a workbook to the cache directory and open the share sheet. Returns the file URI. */
+export async function writeAndShareXlsx(wb: XLSX.WorkBook, fileStem: string, dialogTitle = 'Share Excel report'): Promise<string> {
     // No zip compression: noticeably faster on device, and the file is small anyway.
     const base64: string = XLSX.write(wb, { type: 'base64', bookType: 'xlsx', compression: false });
-    const uri = `${FileSystem.cacheDirectory}${reportFileStem(data)}.xlsx`;
+    const uri = `${FileSystem.cacheDirectory}${fileStem}.xlsx`;
     await FileSystem.writeAsStringAsync(uri, base64, { encoding: FileSystem.EncodingType.Base64 });
     if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
             mimeType: XLSX_MIME,
             UTI: 'org.openxmlformats.spreadsheetml.sheet',
-            dialogTitle: 'Share Excel report',
+            dialogTitle,
         });
     }
     return uri;
+}
+
+/** Build the .xlsx, save it to the cache directory, and open the share sheet. Returns the file URI. */
+export async function exportExcel(data: ReportData): Promise<string> {
+    // Yield one macrotask so the caller's spinner can paint before the
+    // synchronous workbook build blocks the JS thread.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return writeAndShareXlsx(buildWorkbook(data), reportFileStem(data));
 }

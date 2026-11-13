@@ -318,7 +318,7 @@ export function useTransactions(filters?: TransactionFilters, options?: UseTrans
             });
 
             if (tx.type === 'expense') {
-                NotificationService.checkAndSendBudgetAlert(categoryId, tx.amount).catch(() => {});
+                NotificationService.checkAndSendBudgetAlert(categoryId, tx.amount, todayString()).catch(() => {});
             }
 
             await fetchTransactions();

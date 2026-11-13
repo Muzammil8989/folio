@@ -5,20 +5,11 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { parseLocalDate } from '@/lib/utils/date';
-import { IoniconsName } from '@/types';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Switch, View } from 'react-native';
-import { Pressable } from '@/components/common/pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALL_SECTIONS, buildReportData, type ReportSections } from '../services/report-data';
-
-type Format = 'pdf' | 'xlsx';
-
-const FORMATS: { key: Format; icon: IoniconsName; title: string; body: string }[] = [
-    { key: 'pdf', icon: 'document-text-outline', title: 'PDF report', body: 'A formatted summary with charts, ready to read or print.' },
-    { key: 'xlsx', icon: 'grid-outline', title: 'Excel workbook', body: 'Every transaction as rows you can sort, filter and sum.' },
-];
+import { FormatPicker, type ExportFormat as Format } from './format-picker';
 
 const SECTIONS: { key: keyof ReportSections; label: string }[] = [
     { key: 'transactions', label: 'Transaction list' },
@@ -101,37 +92,7 @@ export function ExportSheet({ visible, onClose }: ExportSheetProps) {
             <ThemedText type="caption" className="mt-2 mb-6">{rangeText}</ThemedText>
 
             <ThemedText type="kicker" className="mb-2">Format</ThemedText>
-            <View className="gap-2 mb-6" accessibilityRole="radiogroup">
-                {FORMATS.map(f => {
-                    const selected = f.key === format;
-                    return (
-                        <Pressable
-                            key={f.key}
-                            onPress={() => setFormat(f.key)}
-                            accessibilityRole="radio"
-                            accessibilityState={{ selected }}
-                            accessibilityLabel={`${f.title}. ${f.body}`}
-                            className="flex-row items-center rounded-xl px-4 py-3.5"
-                            style={({ pressed }) => ({
-                                borderWidth: selected ? 1.5 : 1,
-                                borderColor: selected ? colors.textPrimary : colors.borderStrong,
-                                backgroundColor: selected ? colors.surface : pressed ? colors.backgroundAlt : 'transparent',
-                            })}
-                        >
-                            <Ionicons name={f.icon} size={22} color={selected ? colors.primary : colors.textSecondary} />
-                            <View className="flex-1 mx-3">
-                                <ThemedText type="defaultSemiBold" className="text-[15px]">{f.title}</ThemedText>
-                                <ThemedText type="caption">{f.body}</ThemedText>
-                            </View>
-                            <Ionicons
-                                name={selected ? 'radio-button-on' : 'radio-button-off'}
-                                size={20}
-                                color={selected ? colors.textPrimary : colors.borderStrong}
-                            />
-                        </Pressable>
-                    );
-                })}
-            </View>
+            <FormatPicker value={format} onChange={setFormat} />
 
             <ThemedText type="kicker" className="mb-1">Include</ThemedText>
             <View className="mb-7 border-t border-divider dark:border-dark-divider">
