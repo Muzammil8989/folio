@@ -18,6 +18,8 @@ export interface LineSeries {
 interface LineChartProps {
     /** One label per point (x axis). */
     labels: string[];
+    /** Longer label per point for the tooltip, e.g. a full date; defaults to `labels`. */
+    tooltipLabels?: string[];
     series: LineSeries[];
     /** Full value for the tooltip and screen readers. */
     formatValue: (n: number) => string;
@@ -63,6 +65,7 @@ export function fittedTicks(min: number, max: number): number[] {
  */
 function LineChartInner({
     labels,
+    tooltipLabels,
     series,
     formatValue,
     formatAxis,
@@ -121,8 +124,9 @@ function LineChartInner({
     const { active, handlers, select } = useChartScrub(px => indexAt(px, axisW, plotW, n, true));
     const selected = active != null && active < n ? active : null;
     const topY = selected != null ? Math.min(...series.map(s => y(s.values[selected] ?? lo))) : 0;
+    const pointLabel = (i: number) => tooltipLabels?.[i] ?? labels[i];
     const describe = (i: number) =>
-        `${labels[i]}: ${series.map(s => `${s.label} ${formatValue(s.values[i] ?? 0)}`).join(', ')}`;
+        `${pointLabel(i)}: ${series.map(s => `${s.label} ${formatValue(s.values[i] ?? 0)}`).join(', ')}`;
 
     return (
         <View
@@ -226,10 +230,10 @@ function LineChartInner({
                     {selected != null && (
                         <ChartTooltip x={x(selected)} y={topY} width={width}>
                             <ThemedText type="label" className="text-[11px] leading-4" style={{ color: t.surface }}>
-                                {labels[selected]}
+                                {pointLabel(selected)}
                             </ThemedText>
                             {series.map(s => (
-                                <ThemedText key={s.key} type="figure" className="text-[12px] leading-4" style={{ color: t.surface }}>
+                                <ThemedText key={s.key} type="figure" className="text-[13px] leading-5" style={{ color: t.surface }}>
                                     {series.length > 1 ? `${s.label} ` : ''}{formatValue(s.values[selected] ?? 0)}
                                 </ThemedText>
                             ))}

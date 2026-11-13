@@ -87,12 +87,16 @@ export function ChartTooltip({ x, y, width, children }: ChartTooltipProps) {
     );
 }
 
-const HIDE_AFTER_MS = 1500;
+const HIDE_AFTER_MS = 3000;
 
 /**
  * Touch handling shared by the charts: nothing is selected until the user
- * touches the chart; dragging moves the selection; it clears shortly after
- * the finger lifts. `toIndex` maps a touch x to a data index.
+ * touches the chart; dragging moves the selection; it clears a few seconds
+ * after the finger lifts. `toIndex` maps a touch x to a data index.
+ *
+ * Spread `handlers` onto a View. They include `collapsable: false`: without
+ * it Android drops a View that only does layout from the native tree, the
+ * touch never reaches it, and the tooltip never shows.
  */
 export function useChartScrub(toIndex: (x: number) => number) {
     const [active, setActive] = useState<number | null>(null);
@@ -116,13 +120,14 @@ export function useChartScrub(toIndex: (x: number) => number) {
             timer.current = setTimeout(() => setActive(null), HIDE_AFTER_MS);
         };
         return {
+            collapsable: false,
             onStartShouldSetResponder: () => true,
             onResponderGrant: (e: GestureResponderEvent) => { clearTimer(); pick(e); },
             onResponderMove: pick,
             onResponderRelease: release,
             onResponderTerminate: release,
             onResponderTerminationRequest: () => true,
-        };
+        } as const;
     }, []);
 
     /** Select an index directly (screen-reader adjust), then fade out as usual. */

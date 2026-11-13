@@ -59,18 +59,22 @@ describe('buildInsights', () => {
             { categoryId: 2, categoryName: 'Rent', total: 500 },
             { categoryId: 3, categoryName: 'Fuel', total: 100 },
         ],
-        weekdays: [0, 1, 2, 3, 4, 5, 6].map(weekday => ({ weekday, days: 2, average: weekday === 6 ? 300 : 50 })),
         format: fmt,
         now: NOW,
     };
 
-    it('reports the change, the category that moved most, the projection and the busiest weekday', () => {
+    it('reports the category that moved most and the month-end projection', () => {
         const lines = buildInsights(base);
-        expect(lines.map(l => l.key)).toEqual(['spend-change', 'category-move', 'projection', 'weekday']);
-        expect(lines[0]).toMatchObject({ tone: 'bad', text: expect.stringContaining('up 20%') });
-        expect(lines[1].text).toContain('Food moved the most: up 75% (+$300.00)');
-        expect(lines[2].text).toContain('$3,272.73'.replace(',', '')); // 1200 / 11 × 30
-        expect(lines[3].text).toContain('Saturdays');
+        expect(lines.map(l => l.key)).toEqual(['category-move', 'projection']);
+        expect(lines[0]).toMatchObject({ tone: 'bad', text: expect.stringContaining('Food is up 75% on the same days last month (+$300.00)') });
+        expect(lines[1].text).toContain('$3272.73'); // 1200 / 11 × 30
+        expect(lines[1].text).toContain('remaining 19 days');
+    });
+
+    it('leaves out what the key figures and weekday chart already show', () => {
+        const keys = buildInsights(base).map(l => l.key);
+        expect(keys).not.toContain('spend-change');
+        expect(keys).not.toContain('weekday');
     });
 
     it('notices a category that stopped', () => {
@@ -81,16 +85,48 @@ describe('buildInsights', () => {
             prevCategories: [{ categoryId: 1, categoryName: 'Food', total: 900 }, { categoryId: 4, categoryName: 'Travel', total: 600 }],
             prevExpense: 1500,
         });
-        expect(lines.find(l => l.key === 'category-move')?.text).toContain('Travel moved the most: down 100%');
+        expect(lines.find(l => l.key === 'category-move')?.text).toContain('Nothing spent on Travel, against $600.00');
+    });
+
+    it('notes spending concentration and overspent months over a longer period', () => {
+        const lines = buildInsights({
+            ...base,
+            period: '6months',
+            range: resolveRange('6months', null, NOW),
+            expense: 1100,
+            prevExpense: 0,
+            prevCategories: [],
+            categories: [
+                { categoryId: 1, categoryName: 'Rent', total: 500 },
+                { categoryId: 2, categoryName: 'Food', total: 300 },
+                { categoryId: 3, categoryName: 'Fuel', total: 200 },
+                { categoryId: 4, categoryName: 'Gifts', total: 100 },
+            ],
+            monthly: [
+                { income: 100, expense: 50 },
+                { income: 100, expense: 150 },
+                { income: 100, expense: 90 },
+                { income: 100, expense: 120 },
+                { income: 100, expense: 80 },
+                { income: 100, expense: 60 },
+            ],
+        });
+        expect(lines.map(l => l.key)).toEqual(['concentration', 'overspent']);
+        expect(lines[0].text).toContain('91% of spending went to three categories: Rent, Food and Fuel');
+        expect(lines[1]).toMatchObject({ tone: 'bad', text: 'Spending was higher than income in 2 of 6 months.' });
     });
 
     it('falls back to the daily average when there is little to say', () => {
-        const lines = buildInsights({ ...base, period: '6months', range: resolveRange('6months', null, NOW), prevExpense: 0, prevCategories: [], weekdays: [] });
+        const lines = buildInsights({ ...base, period: '6months', range: resolveRange('6months', null, NOW), prevExpense: 0, prevCategories: [] });
         expect(lines.map(l => l.key)).toEqual(['daily-average']);
     });
 
+    it('skips the daily average for this month, where the daily chart shows it', () => {
+        expect(buildInsights({ ...base, prevCategories: [], now: new Date(2026, 10, 2) })).toEqual([]);
+    });
+
     it('says nothing for an empty period', () => {
-        expect(buildInsights({ ...base, expense: 0, prevExpense: 0, categories: [], prevCategories: [], weekdays: [] })).toEqual([]);
+        expect(buildInsights({ ...base, expense: 0, prevExpense: 0, categories: [], prevCategories: [] })).toEqual([]);
     });
 });
 

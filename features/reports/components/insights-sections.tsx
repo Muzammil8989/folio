@@ -22,7 +22,7 @@ export function InsightLines({ lines }: { lines: InsightLine[] }) {
     if (!lines.length) return null;
     return (
         <View className="mx-5 mt-5 rounded-2xl border border-divider dark:border-dark-divider bg-surface dark:bg-dark-surface px-4 pt-4 pb-2">
-            <ThemedText type="kicker" className="mb-2">What stands out</ThemedText>
+            <ThemedText type="kicker" className="mb-2">Key insights</ThemedText>
             {lines.map(line => (
                 <View key={line.key} className="flex-row items-start mb-3">
                     <Ionicons

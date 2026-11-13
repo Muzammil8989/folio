@@ -59,6 +59,15 @@ export function startOfWeek(date: Date = new Date()): Date {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysFromMonday);
 }
 
+/**
+ * Full date for chart tooltips, with the weekday: "Wed, 5 Nov 2026"
+ * (order follows the device locale). Accepts YYYY-MM-DD or a Date.
+ */
+export function formatTooltipDate(date: string | Date): string {
+    const d = typeof date === 'string' ? parseLocalDate(date) : date;
+    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /** Format a YYYY-MM-DD string to human-readable "Jan 1, 2025" */
 export function formatDateDisplay(dateStr: string): string {
     const [y, m, d] = dateStr.split('-').map(Number);

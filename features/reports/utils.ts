@@ -213,7 +213,7 @@ export const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thurs
 
 export interface InsightLine {
     key: string;
-    icon: 'trending-up-outline' | 'trending-down-outline' | 'speedometer-outline' | 'calendar-outline' | 'flame-outline' | 'swap-vertical-outline';
+    icon: 'speedometer-outline' | 'flame-outline' | 'swap-vertical-outline' | 'pie-chart-outline' | 'bar-chart-outline';
     text: string;
     /** good / bad colour the icon; neutral leaves it muted. */
     tone: 'good' | 'bad' | 'neutral';
@@ -222,9 +222,15 @@ export interface InsightLine {
 interface CategoryTotal { categoryId: number; categoryName: string; total: number }
 
 /**
- * Up to four short, plain-English observations about the period:
- * spending vs the period before, the category that moved most, the month-end
- * projection, and the busiest weekday.
+ * Up to four short observations that the rest of the Insights page doesn't
+ * already show (the key-figure tiles carry the change vs before, the weekday
+ * chart carries the busiest day):
+ *
+ *   category-move   the category whose spending moved most vs before
+ *   projection      where this month's spending is heading
+ *   concentration   how much of spending the top three categories take
+ *   overspent       months where spending beat income (multi-month periods)
+ *   daily-average   fallback for a quiet period
  */
 export function buildInsights(opts: {
     period: InsightsPeriod;
@@ -233,27 +239,17 @@ export function buildInsights(opts: {
     prevExpense: number;
     categories: CategoryTotal[];
     prevCategories: CategoryTotal[];
-    weekdays: { weekday: number; average: number; days: number }[];
+    /** Month-by-month totals, oldest first, ending with the range's last month. */
+    monthly?: { income: number; expense: number }[];
     format: (n: number) => string;
     now?: Date;
 }): InsightLine[] {
-    const { period, range, expense, prevExpense, categories, prevCategories, weekdays, format } = opts;
+    const { period, range, expense, prevExpense, categories, prevCategories, monthly = [], format } = opts;
     const now = opts.now ?? new Date();
     const out: InsightLine[] = [];
     const vs = period === 'custom' ? 'the period before' : period === 'month' ? 'the same days last month' : 'the same stretch before';
 
-    // 1. Spending vs before
-    const change = pctChange(expense, prevExpense);
-    if (change != null && Math.abs(change) >= 1) {
-        out.push({
-            key: 'spend-change',
-            icon: change > 0 ? 'trending-up-outline' : 'trending-down-outline',
-            text: `Spending is ${change > 0 ? 'up' : 'down'} ${Math.round(Math.abs(change))}% on ${vs} (${format(prevExpense)} then).`,
-            tone: change > 0 ? 'bad' : 'good',
-        });
-    }
-
-    // 2. The category that changed most (in money), if the move is meaningful.
+    // 1. The category that changed most (in money), if the move is meaningful.
     if (prevCategories.length) {
         const prev = new Map(prevCategories.map(c => [c.categoryId, c.total]));
         let best: { name: string; diff: number; pct: number | null } | null = null;
@@ -268,17 +264,17 @@ export function buildInsights(opts: {
         }
         const scale = Math.max(expense, prevExpense);
         if (best && scale > 0 && Math.abs(best.diff) >= scale * 0.05) {
-            const pctText = best.pct == null ? 'new this period' : `${best.diff > 0 ? 'up' : 'down'} ${Math.round(Math.abs(best.pct))}%`;
-            out.push({
-                key: 'category-move',
-                icon: 'swap-vertical-outline',
-                text: `${best.name} moved the most: ${pctText} (${best.diff > 0 ? '+' : '−'}${format(Math.abs(best.diff))}).`,
-                tone: best.diff > 0 ? 'bad' : 'good',
-            });
+            const amount = `${best.diff > 0 ? '+' : '−'}${format(Math.abs(best.diff))}`;
+            const text = best.pct == null
+                ? `${best.name} is new compared with ${vs} (${amount}) and is the biggest change of any category.`
+                : best.pct === -100
+                    ? `Nothing spent on ${best.name}, against ${format(-best.diff)} in ${vs} — the biggest change of any category.`
+                    : `${best.name} is ${best.diff > 0 ? 'up' : 'down'} ${Math.round(Math.abs(best.pct))}% on ${vs} (${amount}), the biggest change of any category.`;
+            out.push({ key: 'category-move', icon: 'swap-vertical-outline', text, tone: best.diff > 0 ? 'bad' : 'good' });
         }
     }
 
-    // 3. Month-end projection (this month only, once a few days have passed).
+    // 2. Month-end projection (this month only, once a few days have passed).
     if (period === 'month' && range.start.slice(0, 7) === isoDay(now).slice(0, 7)) {
         const elapsed = now.getDate();
         const inMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -286,29 +282,43 @@ export function buildInsights(opts: {
             out.push({
                 key: 'projection',
                 icon: 'speedometer-outline',
-                text: `At this pace you will spend about ${format((expense / elapsed) * inMonth)} by the end of the month.`,
+                text: `On current pace, spending will reach about ${format((expense / elapsed) * inMonth)} by month end — ${format(expense / elapsed)} a day for the remaining ${inMonth - elapsed} days.`,
                 tone: 'neutral',
             });
         }
     }
 
-    // 4. Busiest weekday (needs at least two of each weekday to mean anything).
-    const enough = weekdays.filter(w => w.days >= 2);
-    if (enough.length === 7) {
-        const top = enough.reduce((a, b) => (b.average > a.average ? b : a));
-        const avg = enough.reduce((s, w) => s + w.average, 0) / 7;
-        if (top.average > avg * 1.25) {
+    // 3. Concentration: how much of spending the top three categories take.
+    if (categories.length >= 4 && expense > 0) {
+        const top3 = [...categories].sort((a, b) => b.total - a.total).slice(0, 3);
+        const share = Math.round((top3.reduce((s, c) => s + c.total, 0) / expense) * 100);
+        if (share >= 60) {
             out.push({
-                key: 'weekday',
-                icon: 'calendar-outline',
-                text: `${WEEKDAY_NAMES[top.weekday]}s cost the most: ${format(top.average)} on average, against ${format(avg)} on a typical day.`,
+                key: 'concentration',
+                icon: 'pie-chart-outline',
+                text: `${share}% of spending went to three categories: ${top3[0].categoryName}, ${top3[1].categoryName} and ${top3[2].categoryName} — the first place to look for savings.`,
                 tone: 'neutral',
             });
         }
     }
 
-    // Fallback so a quiet period still says something useful.
-    if (out.length < 2 && expense > 0 && range.days > 1) {
+    // 4. Months where spending beat income, over the months of a longer period.
+    const months = range.months >= 3 ? monthly.slice(-range.months).filter(m => m.income > 0 || m.expense > 0) : [];
+    if (months.length >= 3) {
+        const over = months.filter(m => m.expense > m.income).length;
+        out.push({
+            key: 'overspent',
+            icon: 'bar-chart-outline',
+            text: over === 0
+                ? `You spent less than you earned in all ${months.length} months.`
+                : `Spending was higher than income in ${over} of ${months.length} months.`,
+            tone: over === 0 ? 'good' : 'bad',
+        });
+    }
+
+    // Fallback so a quiet period still says something useful. Not for "this
+    // month": the daily spending card already states the daily average.
+    if (out.length < 2 && expense > 0 && range.days > 1 && period !== 'month') {
         out.push({
             key: 'daily-average',
             icon: 'flame-outline',
