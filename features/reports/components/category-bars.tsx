@@ -6,6 +6,7 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import { useChartTheme } from '../chart-theme';
 import { buildDonutSlices } from '../utils';
+import { GrowBar } from './grow-bar';
 
 interface CategoryBarsProps {
     categoryData: CategoryExpense[];
@@ -46,13 +47,10 @@ function CategoryBarsInner({ categoryData, currency, maxRows = 6, kind = 'expens
                             </ThemedText>
                         </View>
                         <View className="h-2 rounded-sm" style={{ backgroundColor: t.grid }}>
-                            <View
-                                className="h-full rounded-sm"
-                                style={{
-                                    width: `${top > 0 ? Math.max((s.value / top) * 100, 1.5) : 0}%`,
-                                    backgroundColor: s.key === 'other' ? t.muted : kind === 'income' ? t.income : t.accent,
-                                    opacity: s.key === 'other' ? 0.6 : 1,
-                                }}
+                            <GrowBar
+                                width={`${top > 0 ? Math.max((s.value / top) * 100, 1.5) : 0}%`}
+                                color={s.key === 'other' ? t.muted : kind === 'income' ? t.income : t.accent}
+                                style={{ opacity: s.key === 'other' ? 0.6 : 1 }}
                             />
                         </View>
                     </>

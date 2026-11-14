@@ -3,6 +3,7 @@ import {
     computePosition,
     effectivePrice,
     formatPct,
+    priceTerm,
     formatPrice,
     formatQuantity,
     formatSigned,
@@ -248,5 +249,13 @@ describe('formatting', () => {
         expect(unitLabel('stock', 3)).toBe('shares');
         expect(unitLabel('mutual_fund')).toBe('units');
         expect(unitLabel('crypto', 0.5)).toBe('coins');
+    });
+});
+
+describe('priceTerm', () => {
+    it('calls a mutual fund price NAV and everything else Price', () => {
+        expect(priceTerm('mutual_fund')).toBe('NAV');
+        expect(priceTerm('stock')).toBe('Price');
+        expect(priceTerm('crypto')).toBe('Price');
     });
 });

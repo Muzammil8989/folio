@@ -3,13 +3,11 @@
  *
  *   header        date range, title, Filter, Export (PDF / Excel)
  *   filters       period tabs, plus chips for custom dates / account / category
- *   standfirst    one plain-English paragraph summarising the period
  *   key figures   income, spending, net, savings rate (▲/▼ vs the period before)
- *   stand-outs    a few generated observations (changes, projection, weekday)
- *   cash flow     income vs spending by month, and net saved each month
- *   categories    donut + bars, spending or income; tap one to drill in
+ *   key insights  a few generated observations the charts don't already show
+ *   cash flow     income vs spending by month (tooltip gives each month's net)
+ *   categories    ranked bars, spending or income; tap one to drill in
  *   daily         spending per day (this month, or short custom ranges)
- *   weekdays      average spending per weekday
  *   largest       the five biggest expenses
  *   budgets       each budget against its limit (this month, unfiltered)
  *   net worth     accounts + savings + investments + lent − owed, today
@@ -17,6 +15,7 @@
 
 import {
     EmptyState,
+    ErrorRetry,
     HeaderIconButton,
     PERIOD_SEGMENTS,
     ScreenHeader,
@@ -36,28 +35,37 @@ import { CashflowBars } from '@/features/reports/components/cashflow-bars';
 import { CategoryBars } from '@/features/reports/components/category-bars';
 import { ChartCard } from '@/features/reports/components/chart-card';
 import { DailySpendingCard } from '@/features/reports/components/daily-spending-card';
-import { DonutChart } from '@/features/reports/components/donut-chart';
 import { InsightsFilterSheet } from '@/features/reports/components/insights-filter-sheet';
 import {
     BudgetBars,
     InsightLines,
     NetWorthBreakdown,
     TopExpensesList,
-    WeekdayBars,
 } from '@/features/reports/components/insights-sections';
 import { LineChart } from '@/features/reports/components/line-chart';
 import { DEFAULT_FILTERS, useInsights, type InsightsFilters } from '@/features/reports/hooks/use-insights';
-import { buildDonutSlices, buildInsights, buildStandfirst, pctChange } from '@/features/reports/utils';
+import { buildInsights, pctChange, resolveRange } from '@/features/reports/utils';
 import { useUser } from '@/features/user/context/user-context';
 import { UserService } from '@/features/user/services/user-service';
 import { useThemeColors } from '@/hooks/use-theme-colors';
 import { getCurrencySymbol } from '@/lib/utils/currency';
-import { parseLocalDate } from '@/lib/utils/date';
+import { formatTooltipDate, parseLocalDate } from '@/lib/utils/date';
 import { useModalActions } from '@/providers/modal-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { type Href, router } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
+import Animated, {
+    Easing,
+    FadeIn,
+    FadeInDown,
+    FadeOut,
+    LinearTransition,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CATEGORY_MODES: readonly SegmentOption<'expense' | 'income'>[] = [
@@ -74,32 +82,41 @@ function formatRange(start: string, end: string): string {
     return start === end ? eFmt : `${sFmt} – ${eFmt}`;
 }
 
+/** Same shape as the loaded page (four tiles, insights, cash flow, categories) so nothing jumps. */
 function ReportsSkeleton() {
     return (
-        <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-            <Skeleton height={14} borderRadius={4} style={{ marginBottom: 8 }} />
-            <Skeleton width="80%" height={14} borderRadius={4} style={{ marginBottom: 28 }} />
-            <View style={{ flexDirection: 'row', gap: 16, marginBottom: 16 }}>
-                <Skeleton height={52} borderRadius={6} style={{ flex: 1 }} />
-                <Skeleton height={52} borderRadius={6} style={{ flex: 1 }} />
+        <View accessible accessibilityRole="progressbar" accessibilityLabel="Loading insights" style={{ paddingHorizontal: 20, marginTop: 20 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {[0, 1, 2, 3].map(i => (
+                    <Skeleton key={i} height={80} borderRadius={16} style={{ flexBasis: '46%', flexGrow: 1 }} />
+                ))}
             </View>
-            <View style={{ flexDirection: 'row', gap: 16, marginBottom: 32 }}>
-                <Skeleton height={52} borderRadius={6} style={{ flex: 1 }} />
-                <Skeleton height={52} borderRadius={6} style={{ flex: 1 }} />
+            <Skeleton height={112} borderRadius={16} style={{ marginTop: 20 }} />
+            <Skeleton height={240} borderRadius={16} style={{ marginTop: 20 }} />
+            <View style={{ marginTop: 20 }}>
+                {[0, 1, 2, 3].map(i => (
+                    <View key={i} style={{ marginBottom: 16 }}>
+                        <Skeleton width={`${70 - i * 12}%`} height={12} borderRadius={4} style={{ marginBottom: 6 }} />
+                        <Skeleton height={8} borderRadius={2} />
+                    </View>
+                ))}
             </View>
-            <Skeleton height={180} borderRadius={6} style={{ marginBottom: 32 }} />
-            {[0, 1, 2, 3].map(i => (
-                <View key={i} style={{ marginBottom: 16 }}>
-                    <Skeleton width="60%" height={12} borderRadius={4} style={{ marginBottom: 6 }} />
-                    <Skeleton height={8} borderRadius={2} />
-                </View>
-            ))}
         </View>
     );
 }
 
+/** Each section's entrance on the first load: a short staggered rise. */
+const reveal = (i: number) => FadeInDown.delay(i * 50).duration(300).easing(Easing.out(Easing.cubic));
+/** Cards that appear or disappear later (filter changes) just fade. */
+const CARD_IN = FadeIn.duration(200);
+const CARD_OUT = FadeOut.duration(150);
+/** Cards below a change slide to their new place instead of jumping. */
+const CARD_LAYOUT = LinearTransition.duration(220);
+
+const tick = () => Haptics.selectionAsync().catch(() => {});
+
 /** One key figure in a surface tile; two tiles per row. */
-function FigureTile({
+const FigureTile = React.memo(function FigureTile({
     label,
     value,
     valueColor,
@@ -120,14 +137,15 @@ function FigureTile({
             <StatFigure label={label} value={value} valueColor={valueColor} delta={delta} invertDelta={invertDelta} deltaCaption="vs before" />
         </View>
     );
-}
+});
 
 /** A removable chip showing one active filter. */
 function ActiveChip({ label, onRemove }: { label: string; onRemove: () => void }) {
     const colors = useThemeColors();
     return (
         <Pressable
-            onPress={onRemove}
+            onPress={() => { tick(); onRemove(); }}
+            hitSlop={{ top: 6, bottom: 6 }}
             accessibilityRole="button"
             accessibilityLabel={`Remove filter: ${label}`}
             className="flex-row items-center rounded-full pl-3 pr-2"
@@ -152,7 +170,7 @@ export default function ReportsScreen() {
     const [filters, setFilters] = useState<InsightsFilters>(DEFAULT_FILTERS);
     const [filterOpen, setFilterOpen] = useState(false);
     const [categoryMode, setCategoryMode] = useState<'expense' | 'income'>('expense');
-    const { data, loading, refresh } = useInsights(filters);
+    const { data, loading, error, refresh } = useInsights(filters);
     const { accounts } = useAccounts();
     const { categories } = useCategories();
     const { budgets } = useBudgets();
@@ -177,18 +195,6 @@ export default function ReportsScreen() {
         };
     }, [data]);
 
-    const standfirst = useMemo(() => {
-        if (!data) return '';
-        const top = buildDonutSlices(data.expenseCategories, 6).slices.find(s => s.key !== 'other');
-        return buildStandfirst({
-            period: filters.period,
-            income: figures.income,
-            expense: figures.expense,
-            topCategory: top && !filters.categoryId ? { name: top.label, percent: top.percent } : null,
-            format: fmt,
-        });
-    }, [data, filters.period, filters.categoryId, figures, fmt]);
-
     const insightLines = useMemo(() => {
         if (!data) return [];
         return buildInsights({
@@ -198,7 +204,9 @@ export default function ReportsScreen() {
             prevExpense: data.prevExpense,
             categories: filters.categoryId ? [] : data.expenseCategories,
             prevCategories: filters.categoryId ? [] : data.prevExpenseCategories,
-            weekdays: data.weekdays,
+            // With a category filter the monthly totals only hold that
+            // category, so "spending beat income" would be meaningless.
+            monthly: filters.categoryId ? [] : data.monthly,
             format: fmt,
         });
     }, [data, filters.period, filters.categoryId, fmt]);
@@ -207,38 +215,89 @@ export default function ReportsScreen() {
         () => (categoryMode === 'expense' ? data?.expenseCategories : data?.incomeCategories) ?? [],
         [data, categoryMode],
     );
-    const donut = useMemo(() => {
-        const { slices, total } = buildDonutSlices(categoryData, 6);
-        return { slices, total };
-    }, [categoryData]);
 
     const monthly = useMemo(() => data?.monthly ?? [], [data]);
     const hasMonthly = monthly.some(m => m.income > 0 || m.expense > 0);
-    const netSeries = monthly.map(m => m.income - m.expense);
-    const avgRate = useMemo(() => {
-        const inc = monthly.reduce((s, m) => s + m.income, 0);
-        const exp = monthly.reduce((s, m) => s + m.expense, 0);
-        return inc > 0 ? Math.round(((inc - exp) / inc) * 100) : null;
-    }, [monthly]);
 
     const daily = useMemo(() => data?.daily ?? [], [data]);
     const lineData = useMemo(() => daily.map(d => ({ value: d.amount, dataPointText: '' })), [daily]);
-    const customDailyLabels = useMemo(() => {
-        if (!data || filters.period !== 'custom') return [];
+    const customDaily = useMemo(() => {
+        if (!data || filters.period !== 'custom') return { axis: [] as string[], full: [] as string[] };
         const start = parseLocalDate(data.range.start);
-        return daily.map((_, i) =>
-            new Date(start.getFullYear(), start.getMonth(), start.getDate() + i).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }));
+        const dates = daily.map((_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+        return {
+            axis: dates.map(d => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })),
+            full: dates.map(d => formatTooltipDate(d)),
+        };
     }, [data, daily, filters.period]);
 
-    const weekdayHasData = (data?.weekdays ?? []).some(w => w.total > 0);
-    const noData = !!data && figures.income === 0 && figures.expense === 0 && !hasMonthly;
-    const showSkeleton = loading && !data;
-    const kicker = data ? formatRange(data.range.start, data.range.end) : '';
+    const dailySeries = useMemo(
+        () => [{ key: 'daily', label: 'Spent', color: chart.accent, values: daily.map(d => d.amount), fill: true }],
+        [daily, chart.accent],
+    );
+    const formatAxis = useCallback((n: number) => compactMoney(n, symbol), [symbol]);
+    const cashflowLegend = useMemo(
+        () => [
+            { label: 'Income', color: colors.chartIncome },
+            { label: 'Spending', color: colors.chartExpense },
+        ],
+        [colors.chartIncome, colors.chartExpense],
+    );
+    const dailyLegend = useMemo(
+        () => [
+            { label: 'Spent per day', color: colors.primary },
+            { label: 'Daily average', color: colors.textMuted, dashed: true },
+        ],
+        [colors.primary, colors.textMuted],
+    );
+    const hasHoldings = portfolio.holdings.length > 0;
+    const openPortfolio = useCallback(() => router.push('/investments' as Href), []);
 
-    const update = (patch: Partial<InsightsFilters>) => setFilters(prev => ({ ...prev, ...patch }));
+    const noData = !!data && figures.income === 0 && figures.expense === 0 && !hasMonthly;
+    // No figures yet: show the skeleton, unless the load failed (and isn't
+    // being retried right now).
+    const showSkeleton = !data && (!error || loading);
+    // Worked out from the filters, not the loaded data, so the header has its
+    // final height from the first frame. Recomputed after every load too, so
+    // it follows the date when the app stays open past midnight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const range = useMemo(() => resolveRange(filters.period, filters.custom), [filters.period, filters.custom, data]);
+    const kicker = formatRange(range.start, range.end);
+
+    const update = useCallback((patch: Partial<InsightsFilters>) => setFilters(prev => ({ ...prev, ...patch })), []);
     const drillInto = useCallback((categoryId: number) => {
         setFilters(prev => ({ ...prev, categoryId }));
     }, []);
+    const clearAll = useCallback(() => setFilters(DEFAULT_FILTERS), []);
+
+    // Pull-to-refresh is the only time the spinner shows; filter changes dim
+    // the current figures instead.
+    const [pulling, setPulling] = useState(false);
+    const onPull = useCallback(async () => {
+        setPulling(true);
+        try {
+            await refresh();
+        } finally {
+            setPulling(false);
+        }
+    }, [refresh]);
+
+    // Dim the figures while new ones load, and keep them dimmed if that load
+    // failed, since they no longer match the filters.
+    const stale = !!data && !pulling && (loading || !!error);
+    const contentOpacity = useSharedValue(1);
+    useEffect(() => {
+        contentOpacity.value = withTiming(stale ? 0.55 : 1, { duration: 150 });
+    }, [stale, contentOpacity]);
+    const contentStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.value }));
+
+    // Sections rise in once, on the first load; after that only cards that
+    // come and go with a filter change animate.
+    const [revealed, setRevealed] = useState(false);
+    useEffect(() => {
+        if (data && !revealed) setRevealed(true);
+    }, [data, revealed]);
+    const enter = (i: number) => (revealed ? CARD_IN : reveal(i));
 
     return (
         <View className="flex-1 bg-background dark:bg-dark-background">
@@ -281,9 +340,9 @@ export default function ReportsScreen() {
                     className="mx-5"
                 />
                 {activeCount > 0 && (
-                    <View className="flex-row flex-wrap px-5 mt-3" style={{ gap: 8 }}>
-                        {filters.period === 'custom' && data && (
-                            <ActiveChip label={formatRange(data.range.start, data.range.end)} onRemove={() => update({ period: 'month', custom: null })} />
+                    <Animated.View entering={CARD_IN} exiting={CARD_OUT} style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, marginTop: 12, gap: 8 }}>
+                        {filters.period === 'custom' && (
+                            <ActiveChip label={kicker} onRemove={() => update({ period: 'month', custom: null })} />
                         )}
                         {filters.accountId != null && (
                             <ActiveChip label={accountName ?? 'Account'} onRemove={() => update({ accountId: null })} />
@@ -292,11 +351,16 @@ export default function ReportsScreen() {
                             <ActiveChip label={categoryName ?? 'Category'} onRemove={() => update({ categoryId: null })} />
                         )}
                         {activeCount > 1 && (
-                            <Pressable onPress={() => setFilters(DEFAULT_FILTERS)} accessibilityRole="button" className="justify-center px-2 min-h-[32px]">
+                            <Pressable
+                                onPress={() => { tick(); clearAll(); }}
+                                hitSlop={{ top: 6, bottom: 6 }}
+                                accessibilityRole="button"
+                                className="justify-center px-2 min-h-[32px]"
+                            >
                                 <ThemedText type="label" className="text-[13px]" style={{ color: colors.primary }}>Clear all</ThemedText>
                             </Pressable>
                         )}
-                    </View>
+                    </Animated.View>
                 )}
             </View>
 
@@ -306,15 +370,35 @@ export default function ReportsScreen() {
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
-                        refreshing={loading && !!data}
-                        onRefresh={refresh}
+                        refreshing={pulling}
+                        onRefresh={onPull}
                         tintColor={colors.primary}
                         colors={[colors.primary]}
                     />
                 }
             >
+                {/* A reload failed but older figures are on screen: say so. */}
+                {!!error && !!data && !loading && (
+                    <Animated.View
+                        entering={CARD_IN}
+                        exiting={CARD_OUT}
+                        accessibilityRole="alert"
+                        style={{ marginHorizontal: 20, marginTop: 16, padding: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.backgroundAlt }}
+                    >
+                        <Ionicons name="alert-circle-outline" size={18} color={colors.expense} style={{ marginRight: 8 }} />
+                        <ThemedText type="caption" className="flex-1">
+                            Couldn&apos;t update for these filters. These are the last figures that loaded.
+                        </ThemedText>
+                        <Pressable onPress={refresh} accessibilityRole="button" hitSlop={8} className="ml-3 justify-center min-h-[32px]">
+                            <ThemedText type="label" className="text-[13px]" style={{ color: colors.primary }}>Try again</ThemedText>
+                        </Pressable>
+                    </Animated.View>
+                )}
+                <Animated.View style={contentStyle}>
                 {showSkeleton ? (
                     <ReportsSkeleton />
+                ) : error && !data ? (
+                    <ErrorRetry message="Couldn't load your insights." onRetry={refresh} />
                 ) : noData ? (
                     <EmptyState
                         icon="bar-chart-outline"
@@ -323,90 +407,61 @@ export default function ReportsScreen() {
                             ? 'No income or spending fits these filters. Try a longer period or fewer filters.'
                             : 'Add a few transactions and this page will turn them into a report.'}
                         actionLabel={activeCount ? 'Clear filters' : undefined}
-                        onAction={activeCount ? () => setFilters(DEFAULT_FILTERS) : undefined}
+                        onAction={activeCount ? clearAll : undefined}
                     />
                 ) : data ? (
                     <>
-                        {/* ── Standfirst ───────────────────────────────── */}
-                        <View className="px-5 pt-5">
-                            <ThemedText className="text-[17px] leading-[26px]" style={{ color: colors.textSecondary }}>
-                                {standfirst}
-                            </ThemedText>
-                        </View>
-
                         {/* ── Key figures ──────────────────────────────── */}
-                        <View className="px-5 mt-5 flex-row flex-wrap" style={{ gap: 10 }}>
-                            <FigureTile label="Income" value={fmt(figures.income)} valueColor={colors.income} delta={figures.incomeDelta} />
-                            <FigureTile label="Spending" value={fmt(figures.expense)} valueColor={colors.expense} delta={figures.expenseDelta} invertDelta />
-                            <FigureTile
-                                label="Net"
-                                value={`${figures.net < 0 ? '−' : '+'}${fmt(Math.abs(figures.net))}`}
-                                valueColor={figures.net < 0 ? colors.expense : colors.textPrimary}
-                            />
-                            <FigureTile
-                                label="Savings rate"
-                                value={figures.savingsRate == null ? '—' : `${figures.savingsRate}%`}
-                                valueColor={figures.savingsRate != null && figures.savingsRate < 0 ? colors.expense : undefined}
-                            />
-                        </View>
+                        <Animated.View entering={enter(0)} layout={CARD_LAYOUT}>
+                            <View className="px-5 mt-5 flex-row flex-wrap" style={{ gap: 10 }}>
+                                <FigureTile label="Income" value={fmt(figures.income)} valueColor={colors.income} delta={figures.incomeDelta} />
+                                <FigureTile label="Spending" value={fmt(figures.expense)} valueColor={colors.expense} delta={figures.expenseDelta} invertDelta />
+                                <FigureTile
+                                    label="Net"
+                                    value={`${figures.net < 0 ? '−' : '+'}${fmt(Math.abs(figures.net))}`}
+                                    valueColor={figures.net < 0 ? colors.expense : colors.textPrimary}
+                                />
+                                <FigureTile
+                                    label="Savings rate"
+                                    value={figures.savingsRate == null ? '—' : `${figures.savingsRate}%`}
+                                    valueColor={figures.savingsRate != null && figures.savingsRate < 0 ? colors.expense : undefined}
+                                />
+                            </View>
+                        </Animated.View>
 
-                        {/* ── What stands out ──────────────────────────── */}
-                        <InsightLines lines={insightLines} />
+                        {/* ── Key insights ─────────────────────────────── */}
+                        {insightLines.length > 0 && (
+                            <Animated.View entering={enter(1)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <InsightLines lines={insightLines} />
+                            </Animated.View>
+                        )}
 
                         {/* ── Cash flow ────────────────────────────────── */}
                         {hasMonthly && (
-                            <ChartCard
-                                kicker={filters.period === 'custom'
-                                    ? `${monthly.length} months to ${monthly[monthly.length - 1].month} ${monthly[monthly.length - 1].year}`
-                                    : `Last ${monthly.length} months`}
-                                title={categoryName ? `${categoryName} by month` : 'Income vs spending'}
-                                legend={[
-                                    { label: 'Income', color: colors.chartIncome },
-                                    { label: 'Spending', color: colors.chartExpense },
-                                ]}
-                            >
-                                <CashflowBars data={monthly} currency={currency} />
-                            </ChartCard>
-                        )}
-
-                        {/* ── Net each month ───────────────────────────── */}
-                        {hasMonthly && !filters.categoryId && monthly.length >= 2 && (
-                            <ChartCard kicker="Trend" title="Net saved each month" legend={[{ label: 'Income − spending', color: chart.accent }]}>
-                                <LineChart
-                                    labels={monthly.map(m => m.month)}
-                                    series={[{ key: 'net', label: 'Net', color: chart.accent, values: netSeries }]}
-                                    reference={{ value: 0, color: chart.muted }}
-                                    zeroBased={false}
-                                    formatValue={n => `${n < 0 ? '−' : '+'}${fmt(Math.abs(n))}`}
-                                    formatAxis={n => compactMoney(n, symbol)}
-                                    accessibilityLabel={`Net saved each month for the last ${monthly.length} months.`}
-                                />
-                                {avgRate != null && (
-                                    <ThemedText type="caption" className="mt-2">
-                                        You kept {avgRate}% of your income over these months.
-                                    </ThemedText>
-                                )}
-                            </ChartCard>
+                            <Animated.View entering={enter(2)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <ChartCard
+                                    kicker={filters.period === 'custom'
+                                        ? `${monthly.length} months to ${monthly[monthly.length - 1].month} ${monthly[monthly.length - 1].year}`
+                                        : `Last ${monthly.length} months`}
+                                    title={categoryName ? `${categoryName} by month` : 'Income vs spending'}
+                                    legend={cashflowLegend}
+                                >
+                                    <CashflowBars data={monthly} currency={currency} />
+                                </ChartCard>
+                            </Animated.View>
                         )}
 
                         {/* ── Categories ───────────────────────────────── */}
                         {!filters.categoryId && (data.expenseCategories.length > 0 || data.incomeCategories.length > 0) && (
-                            <ChartCard kicker={categoryMode === 'expense' ? 'Where it went' : 'Where it came from'} title="By category">
-                                <SegmentedControl options={CATEGORY_MODES} value={categoryMode} onChange={setCategoryMode} className="mb-4" />
-                                {categoryData.length === 0 ? (
-                                    <ThemedText type="caption" className="py-6 text-center">
-                                        No {categoryMode === 'expense' ? 'spending' : 'income'} in this period.
-                                    </ThemedText>
-                                ) : (
-                                    <>
-                                        <DonutChart
-                                            key={categoryMode}
-                                            slices={donut.slices}
-                                            centerLabel={categoryMode === 'expense' ? 'Spent' : 'Earned'}
-                                            centerValue={compactMoney(donut.total, symbol)}
-                                            formatValue={fmt}
-                                        />
-                                        <View className="mt-4 pt-4 border-t border-divider dark:border-dark-divider">
+                            <Animated.View entering={enter(3)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <ChartCard kicker={categoryMode === 'expense' ? 'Where it went' : 'Where it came from'} title="By category">
+                                    <SegmentedControl options={CATEGORY_MODES} value={categoryMode} onChange={setCategoryMode} className="mb-4" />
+                                    {categoryData.length === 0 ? (
+                                        <ThemedText type="caption" className="py-6 text-center">
+                                            No {categoryMode === 'expense' ? 'spending' : 'income'} in this period.
+                                        </ThemedText>
+                                    ) : (
+                                        <>
                                             <CategoryBars
                                                 categoryData={categoryData}
                                                 currency={currency}
@@ -414,72 +469,69 @@ export default function ReportsScreen() {
                                                 onPressCategory={drillInto}
                                             />
                                             <ThemedText type="caption" className="mt-2">Tap a category to see only that category.</ThemedText>
-                                        </View>
-                                    </>
-                                )}
-                            </ChartCard>
+                                        </>
+                                    )}
+                                </ChartCard>
+                            </Animated.View>
                         )}
 
                         {/* ── Daily ────────────────────────────────────── */}
                         {filters.period === 'month' && lineData.length > 1 && (
-                            <ChartCard
-                                kicker="This month"
-                                title="Daily spending"
-                                legend={[
-                                    { label: 'Spent per day', color: colors.primary },
-                                    { label: 'Daily average', color: colors.textMuted, dashed: true },
-                                ]}
-                            >
-                                <DailySpendingCard lineData={lineData} formatValue={fmt} symbol={symbol} />
-                            </ChartCard>
+                            <Animated.View entering={enter(4)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <ChartCard kicker="This month" title="Daily spending" legend={dailyLegend}>
+                                    <DailySpendingCard lineData={lineData} formatValue={fmt} symbol={symbol} startDate={data.range.start} />
+                                </ChartCard>
+                            </Animated.View>
                         )}
                         {filters.period === 'custom' && daily.length > 1 && (
-                            <ChartCard kicker="Day by day" title="Daily spending">
-                                <LineChart
-                                    labels={customDailyLabels}
-                                    series={[{ key: 'daily', label: 'Spent', color: chart.accent, values: daily.map(d => d.amount), fill: true }]}
-                                    formatValue={fmt}
-                                    formatAxis={n => compactMoney(n, symbol)}
-                                    accessibilityLabel={`Spending per day from ${customDailyLabels[0]} to ${customDailyLabels[customDailyLabels.length - 1]}.`}
-                                />
-                            </ChartCard>
-                        )}
-
-                        {/* ── Weekdays ─────────────────────────────────── */}
-                        {weekdayHasData && (
-                            <ChartCard kicker="Habits" title="Spending by weekday">
-                                <WeekdayBars data={data.weekdays} format={fmt} />
-                                <ThemedText type="caption" className="mt-2">Average spent on each day of the week.</ThemedText>
-                            </ChartCard>
+                            <Animated.View entering={enter(4)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <ChartCard kicker="Day by day" title="Daily spending">
+                                    <LineChart
+                                        labels={customDaily.axis}
+                                        tooltipLabels={customDaily.full}
+                                        series={dailySeries}
+                                        formatValue={fmt}
+                                        formatAxis={formatAxis}
+                                        accessibilityLabel={`Spending per day from ${customDaily.full[0]} to ${customDaily.full[customDaily.full.length - 1]}.`}
+                                    />
+                                </ChartCard>
+                            </Animated.View>
                         )}
 
                         {/* ── Largest expenses ─────────────────────────── */}
                         {data.top.length > 0 && (
-                            <ChartCard kicker="Biggest items" title="Largest expenses">
-                                <TopExpensesList items={data.top} format={fmt} onPressCategory={filters.categoryId ? undefined : drillInto} />
-                            </ChartCard>
+                            <Animated.View entering={enter(5)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <ChartCard kicker="Biggest items" title="Largest expenses">
+                                    <TopExpensesList items={data.top} format={fmt} onPressCategory={filters.categoryId ? undefined : drillInto} />
+                                </ChartCard>
+                            </Animated.View>
                         )}
 
                         {/* ── Budgets ──────────────────────────────────── */}
                         {filters.period === 'month' && !filtered && budgets.length > 0 && (
-                            <ChartCard kicker="Limits" title="Budgets vs spending">
-                                <BudgetBars budgets={budgets} format={fmt} />
-                            </ChartCard>
+                            <Animated.View entering={enter(6)} exiting={CARD_OUT} layout={CARD_LAYOUT}>
+                                <ChartCard kicker="Limits" title="Budgets vs spending">
+                                    <BudgetBars budgets={budgets} format={fmt} />
+                                </ChartCard>
+                            </Animated.View>
                         )}
                     </>
                 ) : null}
 
                 {/* ── Net worth (today, never filtered) ────────────── */}
                 {data && !showSkeleton && (
-                    <ChartCard kicker="Today · everything" title="Net worth">
-                        <NetWorthBreakdown
-                            parts={data.netWorth}
-                            portfolio={portfolio.summary.value}
-                            format={fmt}
-                            onOpenPortfolio={portfolio.holdings.length ? () => router.push('/investments' as Href) : undefined}
-                        />
-                    </ChartCard>
+                    <Animated.View entering={enter(7)} layout={CARD_LAYOUT}>
+                        <ChartCard kicker="Today · everything" title="Net worth">
+                            <NetWorthBreakdown
+                                parts={data.netWorth}
+                                portfolio={portfolio.summary.value}
+                                format={fmt}
+                                onOpenPortfolio={hasHoldings ? openPortfolio : undefined}
+                            />
+                        </ChartCard>
+                    </Animated.View>
                 )}
+                </Animated.View>
             </ScrollView>
 
             <InsightsFilterSheet

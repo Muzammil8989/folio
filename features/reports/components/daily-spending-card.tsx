@@ -1,4 +1,5 @@
 import { ThemedText } from '@/components/common';
+import { formatTooltipDate, parseLocalDate } from '@/lib/utils/date';
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
@@ -11,7 +12,16 @@ interface DailySpendingCardProps {
     formatValue?: (n: number) => string;
     /** Currency symbol for the y-axis ticks. */
     symbol?: string;
+    /** Date of the first point (YYYY-MM-DD), so the tooltip can show real dates. */
+    startDate?: string;
     height?: number;
+}
+
+/** "Wed, 5 Nov 2026" for point `i` after `startDate`; "Day N" without a start date. */
+function pointDate(startDate: string | undefined, i: number): string {
+    if (!startDate) return `Day ${i + 1}`;
+    const start = parseLocalDate(startDate);
+    return formatTooltipDate(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
 }
 
 const LABEL_H = 20;
@@ -23,7 +33,7 @@ const RIGHT_PAD = 6; // keeps the end dot and last label inside the chart
  * Touch or drag to read any day (the tooltip hides once you let go); the
  * caption states the average and the peak.
  */
-function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), symbol = '', height = 150 }: DailySpendingCardProps) {
+function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), symbol = '', startDate, height = 150 }: DailySpendingCardProps) {
     const t = useChartTheme();
     const [width, onLayout] = useMeasuredWidth();
     const n = lineData.length;
@@ -70,14 +80,17 @@ function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), sym
     const { active, handlers, select } = useChartScrub(px => indexAt(px, axisW, plotW, n, true));
     const selected = active != null && active < n ? active : null;
     const selV = selected != null ? values[selected] ?? 0 : 0;
+    // Date formatting is slow on Hermes; do it once per change, not per scrub frame.
+    const peakDate = useMemo(() => pointDate(startDate, peakIdx), [startDate, peakIdx]);
+    const selDate = useMemo(() => (selected != null ? pointDate(startDate, selected) : ''), [startDate, selected]);
 
     return (
         <View
             onLayout={onLayout}
             accessible
             accessibilityRole="adjustable"
-            accessibilityLabel={`Daily spending this month. Average ${formatValue(avg)} a day. Highest on day ${peakIdx + 1} at ${formatValue(peak)}.`}
-            accessibilityValue={{ text: selected != null ? `Day ${selected + 1}: ${formatValue(selV)}` : 'None selected' }}
+            accessibilityLabel={`Daily spending this month. Average ${formatValue(avg)} a day. Highest on ${peakDate} at ${formatValue(peak)}.`}
+            accessibilityValue={{ text: selected != null ? `${selDate}: ${formatValue(selV)}` : 'None selected' }}
             accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
             onAccessibilityAction={e => {
                 const step = e.nativeEvent.actionName === 'increment' ? 1 : -1;
@@ -137,11 +150,20 @@ function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), sym
                     {selected != null && (
                         <ChartTooltip x={x(selected)} y={y(selV)} width={width}>
                             <ThemedText type="label" className="text-[11px] leading-4" style={{ color: t.surface }}>
-                                Day {selected + 1}{selected === peakIdx && peak > 0 ? ' · peak' : ''}
+                                {selDate}
                             </ThemedText>
-                            <ThemedText type="figure" className="text-[12px] leading-4" style={{ color: t.surface }}>
+                            <ThemedText type="figure" className="text-[13px] leading-5" style={{ color: t.surface }}>
                                 {formatValue(selV)}
                             </ThemedText>
+                            {avg > 0 && (
+                                <ThemedText type="caption" className="text-[11px] leading-4" style={{ color: t.surface, opacity: 0.75 }}>
+                                    {selected === peakIdx && peak > 0
+                                        ? 'Highest day'
+                                        : selV === 0
+                                            ? 'No spending'
+                                            : `${Math.round(Math.abs(selV - avg) / avg * 100)}% ${selV >= avg ? 'above' : 'below'} average`}
+                                </ThemedText>
+                            )}
                         </ChartTooltip>
                     )}
 
@@ -151,7 +173,7 @@ function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), sym
             )}
 
             <ThemedText type="caption" className="mt-2">
-                Average {formatValue(avg)}/day · highest on day {peakIdx + 1} at {formatValue(peak)}
+                Average {formatValue(avg)}/day · highest {formatValue(peak)} on {peakDate}
             </ThemedText>
         </View>
     );

@@ -188,11 +188,15 @@ export function FigureTile({
     value,
     valueColor,
     detail,
+    definition,
 }: {
     label: string;
     value: string;
     valueColor?: string;
+    /** A short figure under the value, e.g. a percentage. */
     detail?: string;
+    /** One short line saying what this figure means. */
+    definition?: string;
 }) {
     return (
         <View
@@ -201,9 +205,24 @@ export function FigureTile({
         >
             <StatFigure label={label} value={value} valueColor={valueColor} size="sm" />
             {!!detail && <ThemedText type="caption" className="mt-0.5" numberOfLines={1}>{detail}</ThemedText>}
+            {!!definition && (
+                <ThemedText type="caption" className="mt-1.5 text-[11px] leading-[15px]" style={{ opacity: 0.8 }} numberOfLines={2}>
+                    {definition}
+                </ThemedText>
+            )}
         </View>
     );
 }
+
+/** One-line definitions shown under the portfolio figures. */
+export const FIGURE_DEFINITIONS = {
+    invested: 'What you paid for the units you still hold.',
+    unrealised: 'Profit or loss on paper: not sold yet.',
+    realised: 'Profit or loss locked in by selling.',
+    dividends: 'Cash paid out to you.',
+    avgCost: 'Invested ÷ quantity, fees included.',
+    totalReturn: 'Unrealised + realised + dividends.',
+} as const;
 
 /** Confirmation sheet for destructive actions. */
 export function ConfirmDialog({
