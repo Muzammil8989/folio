@@ -1,6 +1,7 @@
 import { ThemedText } from '@/components/common';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 export interface LegendItem {
     label: string;
@@ -71,19 +72,27 @@ export function ChartTooltip({ x, y, width, children }: ChartTooltipProps) {
     const left = Math.max(0, Math.min(x - size.w / 2, width - size.w));
     const top = Math.max(0, y - size.h - 8);
     return (
-        <View
-            onLayout={e => {
-                const { width: w, height: h } = e.nativeEvent.layout;
-                setSize(prev => (prev.w === w && prev.h === h ? prev : { w, h }));
-            }}
+        // Fades in and out; the inner View keeps the NativeWind classes.
+        <Animated.View
+            entering={FadeIn.duration(120)}
+            exiting={FadeOut.duration(150)}
             pointerEvents="none"
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
-            className="absolute rounded-lg px-2.5 py-1.5 bg-textPrimary dark:bg-dark-textPrimary"
-            style={{ left, top, opacity: size.w ? 1 : 0, maxWidth: width, elevation: 4, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+            style={{ position: 'absolute', left, top, maxWidth: width }}
         >
-            {children}
-        </View>
+            {/* Hidden until measured, so it never flashes at an unclamped spot. */}
+            <View
+                onLayout={e => {
+                    const { width: w, height: h } = e.nativeEvent.layout;
+                    setSize(prev => (prev.w === w && prev.h === h ? prev : { w, h }));
+                }}
+                className="rounded-lg px-2.5 py-1.5 bg-textPrimary dark:bg-dark-textPrimary"
+                style={{ opacity: size.w ? 1 : 0, elevation: 4, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}
+            >
+                {children}
+            </View>
+        </Animated.View>
     );
 }
 

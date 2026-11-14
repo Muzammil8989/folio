@@ -60,14 +60,6 @@ describe('report filters', () => {
         expect(days.filter(d => d.amount > 0).map(d => [d.day, d.amount])).toEqual([[4, 40], [11, 60]]);
     });
 
-    it('averages spending per weekday over the days in range', async () => {
-        const week = await q.getSpendByWeekday('2026-04-01', '2026-04-30', undefined, new Date(2026, 3, 30));
-        const sat = week.find(w => w.weekday === 6)!;
-        expect(sat).toMatchObject({ total: 100, days: 4, average: 25 });
-        expect(week.find(w => w.weekday === 1)).toMatchObject({ total: 900 });
-        expect(week.reduce((s, w) => s + w.days, 0)).toBe(30);
-    });
-
     it('lists the largest expenses with their category and account', async () => {
         const top = await q.getTopExpenses('2026-04-01', '2026-04-30', undefined, 2);
         expect(top.map(t => [t.amount, t.notes, t.accountName, t.categoryId])).toEqual([

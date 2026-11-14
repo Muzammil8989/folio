@@ -36,6 +36,7 @@ import {
     NEW_TRADE_ID,
     parseFormNumber,
     PRICE_DECIMALS,
+    inlinePriceTerm,
     priceTerm,
     QTY_DECIMALS,
     toInputNumber,
@@ -82,7 +83,7 @@ export function TradeSheet({ visible, onClose, holding, trades, editing, initial
     const unit = (q: number) => unitLabel(holding.asset_type, q);
     // "NAV" for mutual funds, "price" for everything else (Term starts a label).
     const Term = priceTerm(holding.asset_type);
-    const term = Term === 'NAV' ? 'NAV' : 'price';
+    const term = inlinePriceTerm(Term);
 
     const [type, setType] = useState<TradeType>(initialType);
     const [quantity, setQuantity] = useState('');

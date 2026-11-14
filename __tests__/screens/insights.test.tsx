@@ -81,6 +81,50 @@ describe('Insights screen', () => {
         expect((await screen.findAllByText('$700.00')).length).toBeGreaterThan(0);
     });
 
+    it('shows a retry screen when the first load fails, and recovers', async () => {
+        await seed();
+        jest.spyOn(q, 'getTopExpenses').mockRejectedValueOnce(new Error('db busy'));
+        await renderWithProviders(<ReportsScreen />);
+
+        expect(await screen.findByText("Couldn't load your insights.")).toBeTruthy();
+        await press(screen.getByText('Try Again'));
+        expect(await screen.findByText('By category')).toBeTruthy();
+        expect(screen.queryByText("Couldn't load your insights.")).toBeNull();
+    });
+
+    it('warns when a reload fails instead of passing old figures off as new', async () => {
+        await seed();
+        await renderWithProviders(<ReportsScreen />);
+        expect(await screen.findByText('By category')).toBeTruthy();
+
+        const spy = jest.spyOn(q, 'getTopExpenses').mockRejectedValue(new Error('db busy'));
+        await press(screen.getByLabelText('Last 6 months'));
+        expect(await screen.findByText(/Couldn't update for these filters/)).toBeTruthy();
+
+        spy.mockRestore();
+        await press(screen.getByText('Try again'));
+        await waitFor(() => expect(screen.queryByText(/Couldn't update for these filters/)).toBeNull());
+    });
+
+    it('does not compare income with spending once a single category is chosen', async () => {
+        const [cash] = await q.getAccounts();
+        const [, rent] = await q.getCategories('expense');
+        const [salary] = await q.getCategories('income');
+        const now = new Date();
+        for (let k = 0; k < 3; k++) {
+            const date = toISODateString(new Date(now.getFullYear(), now.getMonth() - k, 1));
+            await q.createTransaction({ amount: 2000, type: 'income', date, account_id: cash.id, category_id: salary.id } as any);
+            await q.createTransaction({ amount: 700, type: 'expense', date, account_id: cash.id, category_id: rent.id } as any);
+        }
+        await renderWithProviders(<ReportsScreen />);
+        await press(await screen.findByLabelText('Last 6 months'));
+        expect(await screen.findByText('You spent less than you earned in all 3 months.')).toBeTruthy();
+
+        await press(await screen.findByLabelText(new RegExp(`^${rent.name}: \\$2,100\\.00`)));
+        expect(await screen.findByLabelText(`Remove filter: ${rent.name}`)).toBeTruthy();
+        await waitFor(() => expect(screen.queryByText(/than (you earned|income)/)).toBeNull());
+    });
+
     it('offers to clear filters when nothing matches', async () => {
         const { food } = await seed();
         await renderWithProviders(<ReportsScreen />);

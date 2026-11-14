@@ -2174,48 +2174,6 @@ export async function setHoldingPrice(holdingId: number, price: number, date: st
  * INSIGHTS
  */
 
-export interface WeekdaySpend {
-  /** 0 = Sunday … 6 = Saturday. */
-  weekday: number;
-  total: number;
-  /** How many of this weekday fall in the range (up to today). */
-  days: number;
-  /** total ÷ days. */
-  average: number;
-}
-
-/**
- * Spending per weekday over a range (future-dated entries ignored), with the
- * average per occurrence so ranges that hold, say, five Saturdays and four
- * Sundays still compare fairly.
- */
-export async function getSpendByWeekday(
-  startDate: string,
-  endDate: string,
-  filters?: ReportFilters,
-  now: Date = new Date()
-): Promise<WeekdaySpend[]> {
-  const db = getDb();
-  const today = toISODateString(now);
-  const stop = endDate < today ? endDate : today;
-  const weekday = sql<string>`strftime('%w', ${transactions.date})`;
-  const rows = await db
-    .select({ weekday, total: sum(transactions.amount) })
-    .from(transactions)
-    .where(and(eq(transactions.type, 'expense'), between(transactions.date, startDate, stop), ...reportWhere(filters)))
-    .groupBy(weekday);
-  const totals = new Map(rows.map(r => [Number(r.weekday), Number(r.total) || 0]));
-
-  const days = [0, 0, 0, 0, 0, 0, 0];
-  for (let d = parseLocalDate(startDate); toISODateString(d) <= stop; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
-    days[d.getDay()]++;
-  }
-  return days.map((count, i) => {
-    const total = totals.get(i) ?? 0;
-    return { weekday: i, total, days: count, average: count ? total / count : 0 };
-  });
-}
-
 export interface TopExpense {
   id: number;
   amount: number;

@@ -20,7 +20,7 @@ import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatQuantity, parseFormNumber, PRICE_DECIMALS, priceTerm, QTY_DECIMALS, unitLabel } from '../utils';
+import { formatQuantity, inlinePriceTerm, parseFormNumber, PRICE_DECIMALS, priceTerm, QTY_DECIMALS, unitLabel } from '../utils';
 import { AssetTypeChips, DateRow, Field } from './form-parts';
 
 interface HoldingFormSheetProps {
@@ -81,7 +81,7 @@ export function HoldingFormSheet({ visible, onClose, editing, onSaved }: Holding
 
     // "NAV" for mutual funds, "price" for everything else (Term starts a label).
     const Term = priceTerm(type);
-    const term = Term === 'NAV' ? 'NAV' : 'price';
+    const term = inlinePriceTerm(Term);
     const qty = parseFormNumber(quantity, QTY_DECIMALS);
     const unitPrice = parseFormNumber(price, PRICE_DECIMALS);
     const feeValue = fees.trim() ? parseFormNumber(fees) : 0;

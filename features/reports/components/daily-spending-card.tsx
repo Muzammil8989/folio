@@ -80,14 +80,17 @@ function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), sym
     const { active, handlers, select } = useChartScrub(px => indexAt(px, axisW, plotW, n, true));
     const selected = active != null && active < n ? active : null;
     const selV = selected != null ? values[selected] ?? 0 : 0;
+    // Date formatting is slow on Hermes; do it once per change, not per scrub frame.
+    const peakDate = useMemo(() => pointDate(startDate, peakIdx), [startDate, peakIdx]);
+    const selDate = useMemo(() => (selected != null ? pointDate(startDate, selected) : ''), [startDate, selected]);
 
     return (
         <View
             onLayout={onLayout}
             accessible
             accessibilityRole="adjustable"
-            accessibilityLabel={`Daily spending this month. Average ${formatValue(avg)} a day. Highest on ${pointDate(startDate, peakIdx)} at ${formatValue(peak)}.`}
-            accessibilityValue={{ text: selected != null ? `${pointDate(startDate, selected)}: ${formatValue(selV)}` : 'None selected' }}
+            accessibilityLabel={`Daily spending this month. Average ${formatValue(avg)} a day. Highest on ${peakDate} at ${formatValue(peak)}.`}
+            accessibilityValue={{ text: selected != null ? `${selDate}: ${formatValue(selV)}` : 'None selected' }}
             accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
             onAccessibilityAction={e => {
                 const step = e.nativeEvent.actionName === 'increment' ? 1 : -1;
@@ -147,7 +150,7 @@ function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), sym
                     {selected != null && (
                         <ChartTooltip x={x(selected)} y={y(selV)} width={width}>
                             <ThemedText type="label" className="text-[11px] leading-4" style={{ color: t.surface }}>
-                                {pointDate(startDate, selected)}
+                                {selDate}
                             </ThemedText>
                             <ThemedText type="figure" className="text-[13px] leading-5" style={{ color: t.surface }}>
                                 {formatValue(selV)}
@@ -170,7 +173,7 @@ function DailySpendingCardInner({ lineData, formatValue = n => n.toFixed(2), sym
             )}
 
             <ThemedText type="caption" className="mt-2">
-                Average {formatValue(avg)}/day · highest {formatValue(peak)} on {pointDate(startDate, peakIdx)}
+                Average {formatValue(avg)}/day · highest {formatValue(peak)} on {peakDate}
             </ThemedText>
         </View>
     );

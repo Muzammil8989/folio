@@ -4,7 +4,7 @@ import { useThemeColors } from '@/hooks/use-theme-colors';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import { formatPct, formatSigned } from '../utils';
+import { formatPct, formatSigned, inlinePriceTerm } from '../utils';
 import { FIGURE_DEFINITIONS } from './form-parts';
 
 export interface ReturnsFigures {
@@ -64,7 +64,7 @@ export function ReturnsBreakdown({
     const colors = useThemeColors();
     const [open, setOpen] = useState(false);
     const tone = (n: number) => (Math.abs(n) < 0.005 ? colors.textPrimary : n >= 0 ? colors.income : colors.expense);
-    const term = priceTerm.toLowerCase() === 'nav' ? 'NAV' : 'price';
+    const term = inlinePriceTerm(priceTerm);
 
     return (
         <View className="mx-5 mt-4 rounded-2xl border border-divider dark:border-dark-divider bg-surface dark:bg-dark-surface">

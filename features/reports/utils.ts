@@ -208,9 +208,6 @@ export function pctChange(cur: number, prev: number): number | null {
     return ((cur - prev) / prev) * 100;
 }
 
-export const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-export const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 export interface InsightLine {
     key: string;
     icon: 'speedometer-outline' | 'flame-outline' | 'swap-vertical-outline' | 'pie-chart-outline' | 'bar-chart-outline';
@@ -223,8 +220,7 @@ interface CategoryTotal { categoryId: number; categoryName: string; total: numbe
 
 /**
  * Up to four short observations that the rest of the Insights page doesn't
- * already show (the key-figure tiles carry the change vs before, the weekday
- * chart carries the busiest day):
+ * already show (the key-figure tiles carry the change vs before):
  *
  *   category-move   the category whose spending moved most vs before
  *   projection      where this month's spending is heading

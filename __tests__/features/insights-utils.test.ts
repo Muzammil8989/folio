@@ -71,7 +71,7 @@ describe('buildInsights', () => {
         expect(lines[1].text).toContain('remaining 19 days');
     });
 
-    it('leaves out what the key figures and weekday chart already show', () => {
+    it('leaves out what the key figures already show, and has no weekday line', () => {
         const keys = buildInsights(base).map(l => l.key);
         expect(keys).not.toContain('spend-change');
         expect(keys).not.toContain('weekday');

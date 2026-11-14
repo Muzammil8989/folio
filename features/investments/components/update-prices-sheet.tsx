@@ -19,7 +19,7 @@ import { useModalActions } from '@/providers/modal-context';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatPrice, parseFormNumber, PRICE_DECIMALS, priceTerm, type HoldingSummary } from '../utils';
+import { formatPrice, inlinePriceTerm, parseFormNumber, PRICE_DECIMALS, priceTerm, type HoldingSummary } from '../utils';
 import { DateRow, Field, formatShortDay } from './form-parts';
 
 interface UpdatePricesSheetProps {
@@ -142,7 +142,7 @@ export function UpdatePricesSheet({ visible, onClose, holdings }: UpdatePricesSh
                     const term = priceTerm(h.asset_type);
                     const last = s.price
                         ? `${term} now ${formatPrice(s.price.price, fmt, symbol)} · ${formatShortDay(s.price.date)}`
-                        : `No ${term === 'NAV' ? 'NAV' : 'price'} yet`;
+                        : `No ${inlinePriceTerm(term)} yet`;
                     return (
                         <Field
                             key={h.id}

@@ -103,6 +103,16 @@ export default function InvestmentsScreen() {
         [holdings, portfolio.tradesByHolding, portfolio.pricesByHolding, range],
     );
     const showSeries = series.length >= 2 && series.some(p => p.value > 0);
+    // Stable props for the memoized LineChart (and the date formatting done once).
+    const valueChart = useMemo(() => ({
+        labels: series.map(p => p.label),
+        tooltipLabels: series.map(p => formatTooltipDate(p.date)),
+        series: [
+            { key: 'value', label: 'Value', color: chart.accent, values: series.map(p => p.value), fill: true },
+            { key: 'invested', label: 'Invested', color: chart.muted, values: series.map(p => p.invested), dashed: true },
+        ],
+    }), [series, chart.accent, chart.muted]);
+    const formatAxis = useCallback((v: number) => compactMoney(v, symbol), [symbol]);
 
     const slices = useMemo(
         () => allocation(summaries, allocBy, chart.categorical, OTHER_COLOR),
@@ -287,14 +297,11 @@ export default function InvestmentsScreen() {
                             >
                                 <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} className="mb-3" />
                                 <LineChart
-                                    labels={series.map(p => p.label)}
-                                    tooltipLabels={series.map(p => formatTooltipDate(p.date))}
-                                    series={[
-                                        { key: 'value', label: 'Value', color: chart.accent, values: series.map(p => p.value), fill: true },
-                                        { key: 'invested', label: 'Invested', color: chart.muted, values: series.map(p => p.invested), dashed: true },
-                                    ]}
+                                    labels={valueChart.labels}
+                                    tooltipLabels={valueChart.tooltipLabels}
+                                    series={valueChart.series}
                                     formatValue={fmt}
-                                    formatAxis={v => compactMoney(v, symbol)}
+                                    formatAxis={formatAxis}
                                     accessibilityLabel={`Portfolio value month by month, from ${fmt(series[0].value)} to ${fmt(series[series.length - 1].value)}.`}
                                 />
                                 <ThemedText type="caption" className="mt-2">

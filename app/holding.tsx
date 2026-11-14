@@ -77,6 +77,26 @@ export default function HoldingScreen() {
     const history = useMemo(() => priceHistory(trades, prices), [trades, prices]);
     const newestFirst = useMemo(() => sortTrades(trades).reverse(), [trades]);
 
+    // Stable props for the memoized price-history LineChart, built before the
+    // early returns below (hooks can't be conditional).
+    const historyTerm = holding ? priceTerm(holding.asset_type) : 'Price';
+    const historyChart = useMemo(() => ({
+        labels: history.map(h => formatShortDay(h.date)),
+        tooltipLabels: history.map(h => formatTooltipDate(h.date)),
+        series: [{ key: 'price', label: historyTerm, color: chart.accent, values: history.map(h => h.price) }],
+    }), [history, historyTerm, chart.accent]);
+    const heldQty = summary?.position.quantity ?? 0;
+    const avgCost = summary?.position.avgCost ?? 0;
+    const avgCostLine = useMemo(
+        () => (heldQty > 0 ? { value: avgCost, color: chart.muted } : undefined),
+        [heldQty, avgCost, chart.muted],
+    );
+    const formatHistoryValue = useCallback((v: number) => formatPrice(v, fmt, symbol), [fmt, symbol]);
+    const formatHistoryAxis = useCallback(
+        (v: number) => (Math.abs(v) >= 1000 ? compactMoney(v, symbol) : `${symbol}${Number.parseFloat(v.toPrecision(3))}`),
+        [symbol],
+    );
+
     if (!Number.isFinite(id) || missing) {
         return (
             <View className="flex-1 bg-background dark:bg-dark-background" style={{ paddingTop: insets.top }}>
@@ -239,13 +259,13 @@ export default function HoldingScreen() {
                         ]}
                     >
                         <LineChart
-                            labels={history.map(h => formatShortDay(h.date))}
-                            tooltipLabels={history.map(h => formatTooltipDate(h.date))}
-                            series={[{ key: 'price', label: term, color: chart.accent, values: history.map(h => h.price) }]}
-                            reference={p.quantity > 0 ? { value: p.avgCost, color: chart.muted } : undefined}
+                            labels={historyChart.labels}
+                            tooltipLabels={historyChart.tooltipLabels}
+                            series={historyChart.series}
+                            reference={avgCostLine}
                             zeroBased={false}
-                            formatValue={v => formatPrice(v, fmt, symbol)}
-                            formatAxis={v => (Math.abs(v) >= 1000 ? compactMoney(v, symbol) : `${symbol}${Number.parseFloat(v.toPrecision(3))}`)}
+                            formatValue={formatHistoryValue}
+                            formatAxis={formatHistoryAxis}
                             accessibilityLabel={`${term} history, from ${formatPrice(history[0].price, fmt, symbol)} to ${formatPrice(history[history.length - 1].price, fmt, symbol)}.`}
                         />
                     </ChartCard>

@@ -86,6 +86,11 @@ export function priceTerm(type: AssetType): 'NAV' | 'Price' {
     return type === 'mutual_fund' ? 'NAV' : 'Price';
 }
 
+/** The same term mid-sentence: "NAV" stays as it is, "Price" becomes "price". */
+export function inlinePriceTerm(term: 'NAV' | 'Price'): 'NAV' | 'price' {
+    return term === 'NAV' ? 'NAV' : 'price';
+}
+
 export const TRADE_LABELS: Record<TradeType, string> = { buy: 'Buy', sell: 'Sell', dividend: 'Dividend' };
 
 // ── Trades and positions ─────────────────────────────────────────────────────

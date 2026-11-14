@@ -7,4 +7,11 @@ module.exports = defineConfig([
   {
     ignores: ['dist/*'],
   },
+  {
+    // Build scripts run in Node, not the app.
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      globals: { __dirname: 'readonly', __filename: 'readonly', process: 'readonly', require: 'readonly', module: 'writable' },
+    },
+  },
 ]);
